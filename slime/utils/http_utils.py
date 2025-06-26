@@ -67,9 +67,8 @@ def terminate_process(process: multiprocessing.Process, timeout: float = 1.0) ->
         process.join()
 
 
-async def post(url, payload, use_http2=False):
-    # never timeout
-    timeout = httpx.Timeout(None)
+async def post(url, payload, use_http2=False, timeout=None):
+    timeout = httpx.Timeout(timeout)
     async with httpx.AsyncClient(http1=not use_http2, http2=use_http2, timeout=timeout) as client:
         response = await client.post(url, json=payload or {})
         response.raise_for_status()
@@ -80,9 +79,8 @@ async def post(url, payload, use_http2=False):
     return output
 
 
-async def get(url, use_http2=False):
-    # never timeout
-    timeout = httpx.Timeout(None)
+async def get(url, use_http2=False, timeout=None):
+    timeout = httpx.Timeout(timeout)
     async with httpx.AsyncClient(http1=not use_http2, http2=use_http2, timeout=timeout) as client:
         response = await client.get(url)
         response.raise_for_status()

@@ -212,21 +212,27 @@ async def generate_rollout_async(args, rollout_id: int, data_buffer) -> list[Sam
     data = []
 
     async def abort_rollout():
-        print(f"DEBUG: Sending abort. Current data: {len(data)}, pending tasks: {len(state.pendings)}", flush=True)
         try:
             response = await get(
-                f"http://{args.sglang_router_ip}:{args.sglang_router_port}/list_workers", use_http2=args.use_http2
+                f"http://{args.sglang_router_ip}:{args.sglang_router_port}/list_workers",
+                use_http2=args.use_http2,
+                timeout=60,
             )
             print(f"DEBUG: List workers: {response}", flush=True)
         except Exception as e:
             print(f"Error: {e}, Failed to get list_workers", flush=True)
             return []
 
+        tasks = []
         for url in response["urls"]:
             # abort all the requests
             # NOTE: Using empty string as rid to abort ALL requests by startswith() match
             print(f"Abort request for {url}", flush=True)
-            await post(f"{url}/abort_request", {"rid": ""}, use_http2=False)
+            tasks.append(post(f"{url}/abort_request", {"rid": ""}, use_http2=False, timeout=60))
+        try:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        except Exception as e:
+            print(f"Error: {e}, Failed to abort rollout", flush=True)
 
     have_aborted = False
 

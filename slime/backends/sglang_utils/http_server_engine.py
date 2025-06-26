@@ -57,7 +57,7 @@ def launch_server_process(server_args: ServerArgs) -> multiprocessing.Process:
 
 class HttpServerEngineAdapter:
     """
-    You can use this class to launch a server from a VerlEngine instance.
+    You can use this class to launch a http server.
     We recommend using this class only you need to use http server.
     Otherwise, you can use Engine directly.
     """
@@ -74,12 +74,13 @@ class HttpServerEngineAdapter:
                 f"http://{self.router_ip}:{self.router_port}/add_worker?url=http://{self.server_args.host}:{self.server_args.port}"
             )
 
-    def _make_request(self, endpoint: str, payload: Optional[dict] = None):
+    def _make_request(self, endpoint: str, payload: Optional[dict] = None, timeout: Optional[float] = None):
         """Make a POST request to the specified endpoint with the given payload.
 
         Args:
             endpoint: The API endpoint to call
             payload: The JSON payload to send (default: empty dict)
+            timeout: Request timeout in seconds, None for no timeout (default: None)
 
         Returns:
             The JSON response from the server
@@ -88,7 +89,7 @@ class HttpServerEngineAdapter:
             return
 
         url = f"http://{self.server_args.host}:{self.server_args.port}/{endpoint}"
-        response = requests.post(url, json=payload or {})
+        response = requests.post(url, json=payload or {}, timeout=timeout)
         response.raise_for_status()
         return response.json()
 
@@ -135,10 +136,10 @@ class HttpServerEngineAdapter:
         kill_process_tree(self.process.pid)
 
     def release_memory_occupation(self):
-        return self._make_request("release_memory_occupation")
+        return self._make_request("release_memory_occupation", timeout=60)
 
     def resume_memory_occupation(self):
-        return self._make_request("resume_memory_occupation")
+        return self._make_request("resume_memory_occupation", timeout=60)
 
     def init_weights_update_group(self, master_address, master_port, rank_offset, world_size, group_name, backend):
         return self._make_request(
@@ -165,7 +166,7 @@ class HttpServerEngineAdapter:
         )
 
     def pause_generation(self):
-        return requests.post(f"http://{self.server_args.host}:{self.server_args.port}/pause_generation", json={})
+        return self._make_request("pause_generation", timeout=60)
 
     def continue_generation(self):
-        return requests.post(f"http://{self.server_args.host}:{self.server_args.port}/continue_generation", json={})
+        return self._make_request("continue_generation", timeout=60)
