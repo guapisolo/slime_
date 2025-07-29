@@ -31,13 +31,11 @@ class TrainRayActor(RayActor):
         self.role = role
         self.with_ref = with_ref
 
-        local_rank = int(os.environ.get("LOCAL_RANK", 0))
-        torch.cuda.set_device(f"cuda:{local_rank}")
-
-        dist.init_process_group(
-            backend=args.distributed_backend,
-            timeout=timedelta(minutes=args.distributed_timeout_minutes),
-        )
+        if not dist.is_initialized():
+            dist.init_process_group(
+                backend=args.distributed_backend,
+                timeout=timedelta(minutes=args.distributed_timeout_minutes),
+            )
 
         args.rank = dist.get_rank()
         args.world_size = dist.get_world_size()
