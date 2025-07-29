@@ -13,6 +13,7 @@ from slime.utils.types import ParamInfo
 from .initialize import get_gloo_group
 from .megatron_to_hf import convert_to_hf  # noqa: F401
 from slime.utils.distributed_utils import init_process_group
+from sglang.srt.patch_torch import monkey_patch_torch_reductions
 
 
 def all_gather_param(name, param):
@@ -303,6 +304,7 @@ class UpdateWeightFromTensor:
         self._update_converted_params_from_tensor(converted_named_tensors)
 
     def _update_converted_params_from_tensor(self, converted_named_tensors):
+        monkey_patch_torch_reductions()
         ipc_handle = MultiprocessingSerializer.serialize(converted_named_tensors, output_str=True)
         ipc_handles = (
             [None] * dist.get_world_size(self._ipc_gather_group) if self._ipc_gather_src == dist.get_rank() else None
