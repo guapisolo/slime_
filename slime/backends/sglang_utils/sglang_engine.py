@@ -1,6 +1,5 @@
 import dataclasses
 
-import os
 from typing import TYPE_CHECKING
 
 from sglang.srt.server_args import ServerArgs
@@ -27,7 +26,7 @@ class SglangEngine:
         self.args = args
 
         # remove the CUDA_VISIBLE_DEVICES set by ray and use base_gpu_id
-        os.environ.pop("CUDA_VISIBLE_DEVICES", None)
+        # os.environ.pop("CUDA_VISIBLE_DEVICES", None)
 
         nnodes = max(1, args.rollout_num_gpus_per_engine // args.rollout_num_gpus_per_node)
         node_rank = rank % nnodes
