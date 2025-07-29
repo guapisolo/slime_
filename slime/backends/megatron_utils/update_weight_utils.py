@@ -243,6 +243,7 @@ class UpdateWeightFromTensor:
             self._update_bucket_weights_from_tensor(param_infos)
 
     def _update_bucket_weights_from_tensor(self, param_infos):
+        monkey_patch_torch_reductions()
         pp_size = mpu.get_pipeline_model_parallel_world_size()
         ep_size = mpu.get_expert_model_parallel_world_size()
         rank = dist.get_rank()
@@ -304,7 +305,6 @@ class UpdateWeightFromTensor:
         self._update_converted_params_from_tensor(converted_named_tensors)
 
     def _update_converted_params_from_tensor(self, converted_named_tensors):
-        monkey_patch_torch_reductions()
         ipc_handle = MultiprocessingSerializer.serialize(converted_named_tensors, output_str=True)
         ipc_handles = (
             [None] * dist.get_world_size(self._ipc_gather_group) if self._ipc_gather_src == dist.get_rank() else None

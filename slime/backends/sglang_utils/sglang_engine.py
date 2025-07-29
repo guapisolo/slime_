@@ -25,9 +25,6 @@ class SglangEngine:
     def __init__(self, args, rank, dist_init_addr, port, nccl_port):
         self.args = args
 
-        # remove the CUDA_VISIBLE_DEVICES set by ray and use base_gpu_id
-        # os.environ.pop("CUDA_VISIBLE_DEVICES", None)
-
         nnodes = max(1, args.rollout_num_gpus_per_engine // args.rollout_num_gpus_per_node)
         node_rank = rank % nnodes
         kwargs = {
