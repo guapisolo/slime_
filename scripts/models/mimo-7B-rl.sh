@@ -7,7 +7,6 @@ MODEL_ARGS=(
     --group-query-attention
     --num-query-groups 8
     --use-rotary-position-embeddings
-    --disable-bias-linear
     --add-qkv-bias
     --normalization "RMSNorm"
     --norm-epsilon 1e-5
@@ -16,9 +15,6 @@ MODEL_ARGS=(
     --max-position-embeddings 32768
     --seq-length 32768
     --untie-embeddings-and-output-weights
-    --post-self-attn-layernorm
-    --post-mlp-layernorm
-    --rotary-interleaved
-    --rotary-percent 0.5
     --no-rope-fusion
+    --mtp-num-layers 1
 )
