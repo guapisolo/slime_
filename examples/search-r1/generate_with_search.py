@@ -12,7 +12,7 @@ from slime.utils.types import Sample
 SEARCH_R1_CONFIGS = {
     "max_turns": 3,
     "topk": 3,
-    "google_api_key": "YOUR_API_KEY",  # Replace with your actual API key
+    "google_api_key": "AIzaSyA0SgUWRxD6htuMz0Xkll71yIRGSxBcW1o",  # Replace with your actual API key
     "snippet_only": True,  # Set to True to only return snippets
     "proxy": None,  # Set to your proxy if needed
     "search_concurrency": 256,
