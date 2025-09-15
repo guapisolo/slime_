@@ -40,6 +40,6 @@ async def generate(args, sample: Sample, sampling_params: dict):
         wiki=env.wiki,
         config=tau_config,
     )
-    print(f"Running agent-environment interaction")
+    print(f"Running agent-environment interaction in task {sample.prompt}")
     res = await agent.asolve(env, args.url, sampling_params)
     return res_to_sample(res)
