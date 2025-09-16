@@ -846,9 +846,9 @@ def get_slime_extra_args_provider(add_custom_arguments=None):
                 "--enable-mtp-training",
                 action="store_true",
                 default=False,
-                help="Enable MTP layer parameter updates during training"
+                help="Enable MTP layer parameter updates during training",
             )
-            reset_megatron_args(parser, "--mtp-loss-scaling-factor", float, 0.2)
+            reset_arg(parser, "--mtp-loss-scaling-factor", type=float, default=0.2)
             return parser
 
         def add_ci_arguments(parser):
