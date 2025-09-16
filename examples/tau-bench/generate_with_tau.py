@@ -2,7 +2,7 @@ from typing import Any, Dict
 
 from tau_bench.envs import get_env
 from tau_bench.types import RunConfig
-from trainable_agents import agent_factory
+from trainable_agents import InteractionResult, agent_factory
 
 from slime.utils.types import Sample
 
@@ -17,10 +17,21 @@ TAU_CONFIGS = {
 tau_config = RunConfig(**TAU_CONFIGS)
 
 
-def res_to_sample(res) -> Sample:
-    # Convert back to sample format with reward and metadata
-    raise NotImplementedError
-    return Sample()
+def res_to_sample(res: InteractionResult) -> Sample:
+    status = {
+        InteractionResult.Status.COMPLETED: "completed",
+        InteractionResult.Status.TRUNCATED: "truncated",
+        InteractionResult.Status.ABORTED: "aborted",
+    }.get(res.status)
+    return Sample(
+        prompt=res.prompt,
+        tokens=res.tokens,
+        response=res.response,
+        reward=res.reward,
+        loss_mask=res.loss_mask,
+        status=status,
+        metadata=res.info,
+    )
 
 
 async def generate(args: Dict[str, Any], sample: Sample, sampling_params: dict):

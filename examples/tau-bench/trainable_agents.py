@@ -14,6 +14,7 @@ class InteractionResult(BaseModel):
     reward: float
     messages: List[Dict[str, Any]]
     info: Dict[str, Any]
+    response: str = ""
     loss_mask: Optional[List[int]] = None
     tokens: Optional[int] = None
 
@@ -32,7 +33,7 @@ class TrainableAgentMixin:
         sampling_params: Dict[str, Any],
         task_index: Optional[int] = None,
         max_num_steps: int = 30,
-    ) -> SolveResult:
+    ) -> InteractionResult:
         """
         Extend original Agent to support aync call interaction with LLM server.
 
@@ -121,6 +122,7 @@ class TrainableAgentMixin:
         res.messages = messages
         res.loss_mask = loss_masks
         res.tokens = prompt_token_ids + response_token_ids
+        res.response = response
         return res
 
 
