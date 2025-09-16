@@ -8,7 +8,7 @@ TAU_CONFIGS = {
     "env": "retail",  # Select between ["retail", "airline"]
     "agent": "react",  # Select between ["tool-calling", "act", "react", "few-shot"]
     "user_model": "gemini-2.0-flash-lite",  # Cheap Model for user simulator
-    "google_api_key": "AIzaSyA0SgUWRxD6htuMz0Xkll71yIRGSxBcW1o",  # Replace with your actual API key for user sim
+    "google_api_key": "KEY_HERE",  # Replace with your actual API key for user sim
     "task_split": "train",  # Select between ["train", "test", "dev"] for retail, ["test"] for airline
     "user_strategy": "llm",  # Select between ["llm", "react", "verify", "reflection"]
 }

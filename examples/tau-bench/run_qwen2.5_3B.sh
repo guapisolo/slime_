@@ -27,17 +27,14 @@ CKPT_ARGS=(
 )
 
 ROLLOUT_ARGS=(
-   --prompt-data /root/nq_search/train.parquet
+   --prompt-data /root/tau-bench/retail_train_tasks.json
    --input-key prompt
-   --label-key reward_model
-   --apply-chat-template
    --rollout-shuffle
    --num-rollout 3000
    --rollout-batch-size 32
    --n-samples-per-prompt 8
    --rollout-max-response-len 512
    --rollout-temperature 0.8
-
    --global-batch-size 256
    --balance-data
 )
@@ -49,12 +46,9 @@ PERF_ARGS=(
    --context-parallel-size 1
    --expert-model-parallel-size 1
    --expert-tensor-parallel-size 1
-
    --recompute-granularity full
    --recompute-method uniform
    --recompute-num-layers 1
-
-   # --micro-batch-size 1
    --use-dynamic-batch-size
    --max-tokens-per-gpu 9216
 )
