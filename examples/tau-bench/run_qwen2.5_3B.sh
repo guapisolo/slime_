@@ -29,6 +29,7 @@ CKPT_ARGS=(
 ROLLOUT_ARGS=(
    --prompt-data /root/tau-bench/retail_train_tasks.json
    --input-key prompt
+   --apply-chat-template
    --rollout-shuffle
    --num-rollout 3000
    --rollout-batch-size 32
@@ -96,8 +97,7 @@ MISC_ARGS=(
 )
 
 CUSTOM_ARGS=(
-   --custom-generate-function-path generate_with_search.generate
-   --custom-rm-path generate_with_search.reward_func
+   --custom-generate-function-path generate_with_tau.generate
 )
 # launch the master node of ray in container
 export MASTER_ADDR=${MASTER_ADDR:-"127.0.0.1"}
