@@ -8,10 +8,12 @@ Use the `zhuzilin/slime:latest` image and initialize the environment required fo
 ```bash
 cd /root/
 git clone https://github.com/THUDM/slime.git
+cd slime
 pip install -e .
 # for tau bench 
 cd /root/
 git clone https://github.com/sierra-research/tau-bench
+cd tau-bench
 pip install -e . 
 ```
 
@@ -55,6 +57,6 @@ TAU_CONFIGS = {
 And run:
 
 ```bash
-cd slime/
+cd /root/slime
 bash examples/tau-bench/run_qwen2.5_3B.sh
 ```

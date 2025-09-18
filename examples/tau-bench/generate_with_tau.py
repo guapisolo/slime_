@@ -48,10 +48,12 @@ async def generate(args: Dict[str, Any], sample: Sample, sampling_params: dict):
         tools_info=env.tools_info,
         wiki=env.wiki,
         config=tau_config,
+        rollout_args=args,
+        sampling_params=sampling_params,
     )
     # Samples are required to have prompt field. Instead of setting the actual sample, we set the index within the environment
     # for repeatability.
     task_index = int(sample.prompt)
     print(f"Running agent-environment interaction in task {sample.prompt}")
-    res = await agent.asolve(env, args, sampling_params, task_index)
+    res = await agent.asolve(env, agent.rollout_args, agent.sampling_params, task_index)
     return res_to_sample(res)
