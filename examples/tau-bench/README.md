@@ -46,13 +46,16 @@ You need to configure your litellm API in `generate_with_tau.py` for user simula
 ```python
 TAU_CONFIGS = {
     "env": "retail",  # Select between ["retail", "airline"]
-    "agent": "react",  # Select between ["tool-calling", "act", "react", "few-shot"]
-    "user_model": "gemini-2.0-flash-lite",  # Replace if you want any other model
-    "google_api_key": "YOUR_API_KEY",  # Replace with your actual API key for user sim
-    "task_split": "train",  # Select between ["train", "test", "dev"]
-    "proxy": None,  # Set to your proxy if needed
+    "agent": "tool-calling",  # Select between ["tool-calling", "act", "react", "few-shot"], only tool-calling implemented for now
+    "user_model": "gemini-2.0-flash-lite",  # Cheap Model for user simulator
+    "user_model_provider": "gemini",
+    "task_split": "train",  # Select between ["train", "test", "dev"] for retail, ["test"] for airline
     "user_strategy": "llm",  # Select between ["llm", "react", "verify", "reflection"]
+    "model_provider": "auto_router", # Unused, required
+    "model": "qwen2.5-3b", # Unused, reqired
 }
+# Replace with your actual API key for user sim    
+GEMINI_API_KEY = "YOUR KEY" 
 ```
 
 And run:

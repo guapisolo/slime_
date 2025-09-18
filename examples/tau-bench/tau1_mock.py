@@ -27,10 +27,11 @@ def main():
                 user_model=config.user_model,
                 task_split=config.task_split,
             )
-            output_path = os.path.join(local_dir, f"{env}_{s}_tasks.json")
-            rows = [{"index": i, "metadata": task.model_dump()} for i, task in enumerate(env_instance.tasks)]
+            output_path = os.path.join(local_dir, f"{env}_{s}_tasks.jsonl")
             with open(output_path, "w") as f:
-                json.dump(rows, f, indent=4)
+                for i, task in enumerate(env_instance.tasks):
+                    row = {"index": i, "metadata": task.model_dump()}
+                    f.write(json.dumps(row) + "\n")   # <-- one JSON object per line
             print(f"Saved preprocessed task indices for {env} ({s}) to {output_path}")
 
 

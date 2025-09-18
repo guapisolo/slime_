@@ -1,3 +1,4 @@
+import os
 from typing import Any, Dict
 
 from tau_bench.envs import get_env
@@ -10,10 +11,15 @@ TAU_CONFIGS = {
     "env": "retail",  # Select between ["retail", "airline"]
     "agent": "tool-calling",  # Select between ["tool-calling", "act", "react", "few-shot"], only tool-calling implemented for now
     "user_model": "gemini-2.0-flash-lite",  # Cheap Model for user simulator
-    "google_api_key": "KEY_HERE",  # Replace with your actual API key for user sim
     "task_split": "train",  # Select between ["train", "test", "dev"] for retail, ["test"] for airline
     "user_strategy": "llm",  # Select between ["llm", "react", "verify", "reflection"]
+    "model_provider": "auto_router", # Unused, required
+    "model": "qwen2.5-3b", # Unused, reqired
+    "user_model_provider": "gemini",
 }
+# Replace with your actual API key for user sim    
+GEMINI_API_KEY = "YOUR_API_KEY" 
+os.environ["GEMINI_API_KEY"] = GEMINI_API_KEY
 tau_config = RunConfig(**TAU_CONFIGS)
 
 
@@ -56,4 +62,5 @@ async def generate(args: Dict[str, Any], sample: Sample, sampling_params: dict):
     task_index = int(sample.prompt)
     print(f"Running agent-environment interaction in task {sample.prompt}")
     res = await agent.asolve(env, agent.rollout_args, agent.sampling_params, task_index)
+    print(f"Finished agent-environment interaction in task {sample.prompt}")
     return res_to_sample(res)

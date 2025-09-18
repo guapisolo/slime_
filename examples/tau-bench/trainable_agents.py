@@ -1,7 +1,7 @@
+from enum import Enum
 from typing import Any, Dict, List, Optional
 import json
 
-from pydantic import BaseModel
 from tau_bench.agents.base import Agent
 from tau_bench.agents.tool_calling_agent import RESPOND_ACTION_NAME, ToolCallingAgent
 from tau_bench.types import RunConfig, Action
@@ -9,8 +9,12 @@ from tau_bench.types import RunConfig, Action
 from slime.rollout.sglang_rollout import GenerateState
 from slime.utils.http_utils import post
 
+class Status(Enum):
+    COMPLETED = "completed"
+    TRUNCATED = "truncated"
+    ABORTED = "aborted"
 
-class InteractionResult(BaseModel):
+class InteractionResult:
     prompt: List[Dict[str, Any]]
     reward: float
     messages: List[Dict[str, Any]]
@@ -18,11 +22,6 @@ class InteractionResult(BaseModel):
     response: str = ""
     loss_mask: Optional[List[int]] = None
     tokens: Optional[int] = None
-
-    class Status(str):
-        COMPLETED = "completed"
-        TRUNCATED = "truncated"
-        ABORTED = "aborted"
 
     status: Status = Status.COMPLETED
 

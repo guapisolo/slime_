@@ -27,16 +27,15 @@ CKPT_ARGS=(
 )
 
 ROLLOUT_ARGS=(
-   --prompt-data /root/tau-bench/retail_train_tasks.json
-   --input-key prompt
-   --apply-chat-template
+   --prompt-data /root/tau-bench/retail_train_tasks.jsonl
+   --input-key index
    --rollout-shuffle
    --num-rollout 3000
    --rollout-batch-size 32
    --n-samples-per-prompt 8
    --rollout-max-response-len 512
    --rollout-temperature 0.8
-   --global-batch-size 256
+   --global-batch-size 64
    --balance-data
 )
 
@@ -101,7 +100,8 @@ CUSTOM_ARGS=(
 )
 # launch the master node of ray in container
 export MASTER_ADDR=${MASTER_ADDR:-"127.0.0.1"}
-ray start --head --node-ip-address ${MASTER_ADDR} --num-gpus 8 --disable-usage-stats --temp-dir /root/ray_temp 
+export CUDA_VISIBLE_DEVICES=6,7
+ray start --head --node-ip-address ${MASTER_ADDR} --num-gpus 2 --disable-usage-stats --temp-dir /root/ray_temp 
 
 RUNTIME_ENV_JSON="{
   \"env_vars\": {
@@ -114,8 +114,8 @@ ray job submit --address="http://127.0.0.1:8265" \
    --runtime-env-json="${RUNTIME_ENV_JSON}" \
    -- python3 train.py \
    --actor-num-nodes 1 \
-   --actor-num-gpus-per-node 4 \
-   --rollout-num-gpus 4 \
+   --actor-num-gpus-per-node 2 \
+   --rollout-num-gpus 2 \
    --colocate \
    ${MODEL_ARGS[@]} \
    ${CKPT_ARGS[@]} \
