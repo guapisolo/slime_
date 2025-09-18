@@ -24,19 +24,19 @@ cd /root/slime/examples/tau-bench
 python tau1_mock.py --local_dir /root/tau-bench/
 ```
 
-Initialize the Qwen2.5-3B model:
+Initialize the Qwen2.5-3B-Instruct model needed for tool use:
 
 ```bash
 # hf checkpoint
-huggingface-cli download Qwen/Qwen2.5-3B --local-dir /root/Qwen2.5-3B
+huggingface-cli download Qwen/Qwen2.5-3B-Instruct --local-dir /root/Qwen2.5-3B-Instruct
 
 # mcore checkpoint
 cd /root/slime
 source scripts/models/qwen2.5-3B.sh
 PYTHONPATH=/root/Megatron-LM python tools/convert_hf_to_torch_dist.py \
     ${MODEL_ARGS[@]} \
-    --hf-checkpoint /root/Qwen2.5-3B \
-    --save /root/Qwen2.5-3B_torch_dist
+    --hf-checkpoint /root/Qwen2.5-3B-Instruct \
+    --save /root/Qwen2.5-3B-Instruct_torch_dist
 ```
 
 ## Running the Script
@@ -62,5 +62,5 @@ And run:
 
 ```bash
 cd /root/slime
-bash examples/tau-bench/run_qwen2.5_3B.sh
+bash examples/tau-bench/run_qwen2.5_3B_Instruct.sh
 ```

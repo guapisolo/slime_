@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional
 import json
@@ -14,15 +15,15 @@ class Status(Enum):
     TRUNCATED = "truncated"
     ABORTED = "aborted"
 
+@dataclass
 class InteractionResult:
-    prompt: List[Dict[str, Any]]
+    prompt: str
     reward: float
     messages: List[Dict[str, Any]]
     info: Dict[str, Any]
     response: str = ""
     loss_mask: Optional[List[int]] = None
     tokens: Optional[int] = None
-
     status: Status = Status.COMPLETED
 
 
@@ -97,7 +98,7 @@ class TrainableAgentMixin:
             }
             
             # Send request to sglang server
-            output = await post(url, payload, use_http2=rollout_args.use_http2)
+            output = await post(url, payload)
             
             # Check for abort
             if output["meta_info"]["finish_reason"]["type"] == "abort":
@@ -132,7 +133,7 @@ class TrainableAgentMixin:
             if action.name != RESPOND_ACTION_NAME:
                 # Tool call - limit to first tool call if multiple
                 if len(next_message.get("tool_calls", [])) > 1:
-                    print("Multiple tool calls detected, only the first one will be executed.")
+                    print("[ERROR]:Multiple tool calls detected, only the first one will be executed.")
                 tool_called = next_message["tool_calls"][0]
                 messages.extend([
                     next_message,

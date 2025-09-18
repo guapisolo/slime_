@@ -19,10 +19,10 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 source "${SCRIPT_DIR}/../../scripts/models/qwen2.5-3B.sh"
 
 CKPT_ARGS=(
-   --hf-checkpoint /root/Qwen2.5-3B/
-   --ref-load /root/Qwen2.5-3B_torch_dist/
-   --load /root/Qwen2.5-3B_slime/
-   --save /root/Qwen2.5-3B_slime/
+   --hf-checkpoint /root/Qwen2.5-3B-Instruct/
+   --ref-load /root/Qwen2.5-3B-Instruct_torch_dist/
+   --load /root/Qwen2.5-3B-Instruct_slime/
+   --save /root/Qwen2.5-3B-Instruct_slime/
    --save-interval 20
 )
 
@@ -30,12 +30,12 @@ ROLLOUT_ARGS=(
    --prompt-data /root/tau-bench/retail_train_tasks.jsonl
    --input-key index
    --rollout-shuffle
-   --num-rollout 3000
-   --rollout-batch-size 32
+   --num-rollout 200
+   --rollout-batch-size 16
    --n-samples-per-prompt 8
    --rollout-max-response-len 512
    --rollout-temperature 0.8
-   --global-batch-size 64
+   --global-batch-size 32
    --balance-data
 )
 
@@ -82,6 +82,7 @@ WANDB_ARGS=(
 SGLANG_ARGS=(
    --rollout-num-gpus-per-engine 2
    --sglang-mem-fraction-static 0.7
+   --sglang-tool-call-parser qwen25
 )
 
 MISC_ARGS=(
