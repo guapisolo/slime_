@@ -20,6 +20,7 @@ pip install -e .
 Use the following script to generate mock data for slime training. 
 
 ```bash
+cd /root/slime/examples/tau-bench
 python tau1_mock.py --local_dir /root/tau-bench/
 ```
 
