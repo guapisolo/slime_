@@ -18,7 +18,7 @@ TAU_CONFIGS = {
     "user_model_provider": "gemini",
 }
 # Replace with your actual API key for user sim    
-GEMINI_API_KEY = "YOUR KEY" 
+GEMINI_API_KEY = "YOUR KEY HERE" 
 os.environ["GEMINI_API_KEY"] = GEMINI_API_KEY
 tau_config = RunConfig(**TAU_CONFIGS)
 

@@ -27,21 +27,22 @@ class InteractionResult:
     status: Status = Status.COMPLETED
 
 
-def message_to_action_sglang(
-    message: Dict[str, Any],
+def call_to_action_sglang(calls: List[Any], text_response: str
 ) -> Action:
     """
     Convert sglang response message to Action, similar to original message_to_action
     but adapted for sglang response format.
     """
-    if "tool_calls" in message and message["tool_calls"] is not None and len(message["tool_calls"]) > 0 and message["tool_calls"][0]["function"] is not None:
-        tool_call = message["tool_calls"][0]
+    if calls:
+        if len(calls)>1:
+            print("Multiple tool calls identified, only taking first.")
+        tool_call = calls[0]
         return Action(
-            name=tool_call["function"]["name"],
-            kwargs=json.loads(tool_call["function"]["arguments"]),
+            name=tool_call["name"],
+            kwargs=tool_call["parameters"]),
         )
     else:
-        return Action(name=RESPOND_ACTION_NAME, kwargs={"content": message["content"]})
+        return Action(name=RESPOND_ACTION_NAME, kwargs={"content": text_response})
 
 
 class TrainableAgentMixin:
@@ -63,6 +64,7 @@ class TrainableAgentMixin:
         """
         state = GenerateState(rollout_args)
         url = f"http://{rollout_args.sglang_router_ip}:{rollout_args.sglang_router_port}/generate"
+        tool_url = f"http://{rollout_args.sglang_router_ip}:{rollout_args.sglang_router_port}/parse_function_call"
 
         # Reset environment to the specified task
         env_reset_res = env.reset(task_index=task_index)
@@ -76,7 +78,7 @@ class TrainableAgentMixin:
         ]
         
         # Calculate initial prompt tokens (loss_mask = 0)
-        prompt_text = state.tokenizer.apply_chat_template(messages, tokenize=False)
+        prompt_text = state.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False, tools=self.tools_info)
         prompt_token_ids = state.tokenizer(prompt_text, add_special_tokens=False)["input_ids"]
         loss_masks = [0] * len(prompt_token_ids)  # prompt tokens don't contribute to loss
         
@@ -90,34 +92,37 @@ class TrainableAgentMixin:
         # Multi-turn interaction loop
         for _ in range(max_num_steps):
             # Prepare payload for sglang
+            text_input = state.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False, tools=self.tools_info)
             payload = {
-                "messages": messages,
-                "tools": self.tools_info,
-                "sampling_params": sampling_params,
-                "tool_call_parser": "qwen25",  # or mistral, llama3 depending on your model
-            }
-            
+                "text": text_input,
+                "sampling_params": sampling_params}
             # Send request to sglang server
             output = await post(url, payload)
-            
+        
             # Check for abort
             if output["meta_info"]["finish_reason"]["type"] == "abort":
                 res.status = InteractionResult.Status.ABORTED
                 return res
+            # Extract tool call 
+            response = output["text"]
+            function_call_input = {
+                "text": response,
+                "tool_call_parser": "qwen25",
+                "tools": self.tools_info,
+            }
 
-            # Extract agent response
-            choice = output["choices"][0]
-            next_message = choice.message.model_dump()
+            parsed = await post(tool_url, function_call_input)
 
-            # Calculate agent response tokens (loss_mask = 1)
-            agent_content = next_message.get("content", "")
+            agent_content = parsed['normal_text']
             if agent_content:
+                # TODO: Verify the loss masks are correct. Aren't we skipping the role tokens?
                 cur_token_ids = state.tokenizer(agent_content, add_special_tokens=False)["input_ids"]
                 response_token_ids.extend(cur_token_ids)
                 loss_masks.extend([1] * len(cur_token_ids))  # agent response contributes to loss
-
+            next_message = {"role": "assistant", "content": agent_content}
+            calls = parsed["calls"]
             # Step in environment
-            action = message_to_action_sglang(next_message)
+            action = call_to_action_sglang(calls, agent_content)
             env_response = env.step(action)
 
             # Calculate environment observation tokens (loss_mask = 0)
@@ -131,16 +136,11 @@ class TrainableAgentMixin:
 
             # Update message history
             if action.name != RESPOND_ACTION_NAME:
-                # Tool call - limit to first tool call if multiple
-                if len(next_message.get("tool_calls", [])) > 1:
-                    print("[ERROR]:Multiple tool calls detected, only the first one will be executed.")
-                tool_called = next_message["tool_calls"][0]
                 messages.extend([
                     next_message,
                     {
                         "role": "tool",
-                        "tool_call_id": tool_called["id"],
-                        "name": tool_called["function"]["name"],
+                        "name": action.name,
                         "content": env_response.observation,
                     }
                 ])
