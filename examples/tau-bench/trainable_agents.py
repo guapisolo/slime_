@@ -32,17 +32,20 @@ def call_to_action_sglang(calls: List[Any], text_response: str
     Convert sglang response message to Action, similar to original message_to_action
     but adapted for sglang response format.
     """
+    # Default action if no action was found. 
+    action = Action(name=RESPOND_ACTION_NAME, kwargs={"content": text_response})
     if calls:
         if len(calls)>1:
             print("Multiple tool calls identified, only taking first.")
         tool_call = calls[0]
         params = json.loads(tool_call["parameters"])
-        return Action(
-            name=tool_call["name"],
-            kwargs=params if params else {})
-    else:
-        return Action(name=RESPOND_ACTION_NAME, kwargs={"content": text_response})
-
+        if not isinstance(params, dict):
+            print(f"{params} does not follow dict structure for action")
+        else:
+            action = Action(
+                name=tool_call["name"],
+                kwargs=params)
+    return action 
 
 class TrainableAgentMixin:
     async def asolve(
@@ -104,7 +107,13 @@ class TrainableAgentMixin:
                 return res
             # Extract tool call 
             response = output["text"]
-            parsed = parse_tools(response, self.tools_info, "qwen25")
+            try:
+                parsed = parse_tools(response, self.tools_info, "qwen25")
+            except Exception as e:
+                print(f"rollout response: {response} can not be parsed into tool calls {e}")
+                res.status = Status.ABORTED
+                return res
+
 
             agent_content = parsed['normal_text']
             if agent_content:
