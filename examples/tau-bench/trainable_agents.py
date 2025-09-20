@@ -2,11 +2,10 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional
 import json
-
 from tau_bench.agents.base import Agent
 from tau_bench.agents.tool_calling_agent import RESPOND_ACTION_NAME, ToolCallingAgent
 from tau_bench.types import RunConfig, Action
-
+from sglang_tool_parser import parse_tools
 from slime.rollout.sglang_rollout import GenerateState
 from slime.utils.http_utils import post
 
@@ -37,10 +36,10 @@ def call_to_action_sglang(calls: List[Any], text_response: str
         if len(calls)>1:
             print("Multiple tool calls identified, only taking first.")
         tool_call = calls[0]
+        params = json.loads(tool_call["parameters"])
         return Action(
             name=tool_call["name"],
-            kwargs=tool_call["parameters"]),
-        )
+            kwargs=params if params else {})
     else:
         return Action(name=RESPOND_ACTION_NAME, kwargs={"content": text_response})
 
@@ -101,17 +100,11 @@ class TrainableAgentMixin:
         
             # Check for abort
             if output["meta_info"]["finish_reason"]["type"] == "abort":
-                res.status = InteractionResult.Status.ABORTED
+                res.status = Status.ABORTED
                 return res
             # Extract tool call 
             response = output["text"]
-            function_call_input = {
-                "text": response,
-                "tool_call_parser": "qwen25",
-                "tools": self.tools_info,
-            }
-
-            parsed = await post(tool_url, function_call_input)
+            parsed = parse_tools(response, self.tools_info, "qwen25")
 
             agent_content = parsed['normal_text']
             if agent_content:
@@ -153,12 +146,12 @@ class TrainableAgentMixin:
             
             # Check if done
             if env_response.done:
-                res.status = InteractionResult.Status.COMPLETED
+                res.status = Status.COMPLETED
                 break
         
         # Handle truncation
         if not env_response.done:
-            res.status = InteractionResult.Status.TRUNCATED
+            res.status = Status.TRUNCATED
             
         # Build final result
         res.reward = total_reward

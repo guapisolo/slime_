@@ -3,7 +3,7 @@ from typing import Any, Dict
 
 from tau_bench.envs import get_env
 from tau_bench.types import RunConfig
-from trainable_agents import InteractionResult, agent_factory
+from trainable_agents import InteractionResult, Status, agent_factory
 
 from slime.utils.types import Sample
 
@@ -18,16 +18,16 @@ TAU_CONFIGS = {
     "user_model_provider": "gemini",
 }
 # Replace with your actual API key for user sim    
-GEMINI_API_KEY = "YOUR KEY HERE" 
+GEMINI_API_KEY = "KEY HERE" 
 os.environ["GEMINI_API_KEY"] = GEMINI_API_KEY
 tau_config = RunConfig(**TAU_CONFIGS)
 
 
 def res_to_sample(res: InteractionResult) -> Sample:
     status = {
-        InteractionResult.Status.COMPLETED: "completed",
-        InteractionResult.Status.TRUNCATED: "truncated",
-        InteractionResult.Status.ABORTED: "aborted",
+        Status.COMPLETED: "completed",
+        Status.TRUNCATED: "truncated",
+        Status.ABORTED: "aborted",
     }.get(res.status)
     return Sample(
         prompt=res.prompt,

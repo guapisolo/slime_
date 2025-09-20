@@ -101,7 +101,7 @@ CUSTOM_ARGS=(
 )
 # launch the master node of ray in container
 export MASTER_ADDR=${MASTER_ADDR:-"127.0.0.1"}
-export CUDA_VISIBLE_DEVICES=6,7
+export CUDA_VISIBLE_DEVICES=2,3
 ray start --head --node-ip-address ${MASTER_ADDR} --num-gpus 2 --disable-usage-stats --temp-dir /root/ray_temp 
 
 RUNTIME_ENV_JSON="{
