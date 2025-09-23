@@ -1,7 +1,9 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import json
+
+from transformers import AutoTokenizer
 from tau_bench.agents.base import Agent
 from tau_bench.agents.tool_calling_agent import RESPOND_ACTION_NAME, ToolCallingAgent
 from tau_bench.types import RunConfig, Action
@@ -66,7 +68,6 @@ class TrainableAgentMixin:
         """
         state = GenerateState(rollout_args)
         url = f"http://{rollout_args.sglang_router_ip}:{rollout_args.sglang_router_port}/generate"
-        tool_url = f"http://{rollout_args.sglang_router_ip}:{rollout_args.sglang_router_port}/parse_function_call"
 
         # Reset environment to the specified task
         env_reset_res = env.reset(task_index=task_index)
@@ -80,7 +81,7 @@ class TrainableAgentMixin:
         ]
         
         # Calculate initial prompt tokens (loss_mask = 0)
-        prompt_text = state.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False, tools=self.tools_info)
+        prompt_text = state.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, tools=self.tools_info)
         prompt_token_ids = state.tokenizer(prompt_text, add_special_tokens=False)["input_ids"]
         loss_masks = [0] * len(prompt_token_ids)  # prompt tokens don't contribute to loss
         
@@ -91,6 +92,23 @@ class TrainableAgentMixin:
         # Initialize result
         res = InteractionResult(prompt=prompt_text, reward=0, messages=[], info={})
         
+        def _get_token_delta(tokenizer:AutoTokenizer, messages: List[Dict]) -> Tuple[List[int], List[int]]:
+            # tokenization logic taken from here: https://verl.readthedocs.io/en/v0.4.1/sglang_multiturn/multiturn.html 
+            # to calculate the right token count in a multi-turn environment, use the delta between the last messages
+            
+            curr = tokenizer.apply_chat_template(messages, add_generation_prompt=False, tokenize=False)
+            # Case 1; last message is an assistant response. 
+            if messages[-1]["role"] == "assistant":
+                prev = tokenizer.apply_chat_template(messages[:-1], add_generation_prompt=True, tokenize=False)
+                token_ids += tokenizer.encode(curr[len(prev):], add_special_tokens=False)
+                loss_mask += [1] * len(token_ids)  # Mask only the new assistant tokens
+            else:
+                # Case 2: last message is a tool response or environment observation. 
+                prev = tokenizer.apply_chat_template(messages[:-1], add_generation_prompt=False, tokenize=False)
+                token_ids += tokenizer.encode(curr[len(prev):], add_special_tokens=False)
+                loss_mask += [0] * len(token_ids)  # Mask
+            return token_ids, loss_mask
+
         # Multi-turn interaction loop
         for _ in range(max_num_steps):
             # Prepare payload for sglang
@@ -98,15 +116,15 @@ class TrainableAgentMixin:
             payload = {
                 "text": text_input,
                 "sampling_params": sampling_params}
-            # Send request to sglang server
+            # Send request to sglang server with tool call settings
             output = await post(url, payload)
         
             # Check for abort
             if output["meta_info"]["finish_reason"]["type"] == "abort":
                 res.status = Status.ABORTED
                 return res
-            # Extract tool call 
             response = output["text"]
+            # Extract tool call 
             try:
                 parsed = parse_tools(response, self.tools_info, "qwen25")
             except Exception as e:
@@ -114,44 +132,39 @@ class TrainableAgentMixin:
                 res.status = Status.ABORTED
                 return res
 
+            # Raw assistant response is the learnable target for the model. 
+            messages.append({"role": "assistant", "content": response})
+            assistant_token_ids, assistant_loss_mask = _get_token_delta(state.tokenizer, messages)
+            response_token_ids.extend(assistant_token_ids)
+            loss_masks.extend(assistant_loss_mask)  
 
-            agent_content = parsed['normal_text']
-            if agent_content:
-                # TODO: Verify the loss masks are correct. Aren't we skipping the role tokens?
-                cur_token_ids = state.tokenizer(agent_content, add_special_tokens=False)["input_ids"]
-                response_token_ids.extend(cur_token_ids)
-                loss_masks.extend([1] * len(cur_token_ids))  # agent response contributes to loss
-            next_message = {"role": "assistant", "content": agent_content}
-            calls = parsed["calls"]
-            # Step in environment
+            # Step in environment with the tool call.
+            agent_content, calls = parsed['normal_text'], parsed["calls"]
             action = call_to_action_sglang(calls, agent_content)
             env_response = env.step(action)
-
-            # Calculate environment observation tokens (loss_mask = 0)
-            obs_token_ids = state.tokenizer(env_response.observation, add_special_tokens=False)["input_ids"]
-            response_token_ids.extend(obs_token_ids)
-            loss_masks.extend([0] * len(obs_token_ids))  # environment observation doesn't contribute to loss
-
-            # Update reward and info
-            total_reward = env_response.reward
-            info = {**info, **env_response.info.model_dump()}
-
             # Update message history
             if action.name != RESPOND_ACTION_NAME:
-                messages.extend([
-                    next_message,
+                messages.append(
                     {
                         "role": "tool",
                         "name": action.name,
                         "content": env_response.observation,
                     }
-                ])
+                )
             else:
-                # Direct response
-                messages.extend([
-                    next_message,
+                # Direct response, similar to ToolCallingAgent logic. 
+                messages.append(
                     {"role": "user", "content": env_response.observation},
-                ])
+                )
+
+            env_token_ids, env_loss_mask = _get_token_delta(state.tokenizer, messages)
+            response_token_ids.extend(env_token_ids)
+            loss_masks.extend(env_loss_mask)  
+
+            # Update reward and info
+            total_reward = env_response.reward
+            info = {**info, **env_response.info.model_dump()}
+
             
             # Check if done
             if env_response.done:
