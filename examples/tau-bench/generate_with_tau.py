@@ -18,7 +18,7 @@ TAU_CONFIGS = {
     "user_model_provider": "gemini",
 }
 # Replace with your actual API key for user sim    
-GEMINI_API_KEY = "KEY HERE" 
+GEMINI_API_KEY = "NO KEY" 
 os.environ["GEMINI_API_KEY"] = GEMINI_API_KEY
 tau_config = RunConfig(**TAU_CONFIGS)
 
@@ -63,4 +63,6 @@ async def generate(args: Dict[str, Any], sample: Sample, sampling_params: dict):
     print(f"Starting agent-environment interaction in task {sample.prompt}")
     res = await agent.asolve(env, agent.rollout_args, agent.sampling_params, task_index)
     print(f"Finished agent-environment interaction in task {sample.prompt}")
-    return res_to_sample(res)
+    res = res_to_sample(res)
+    res.index = sample.index 
+    return res
