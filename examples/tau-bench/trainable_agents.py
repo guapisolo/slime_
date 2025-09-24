@@ -7,9 +7,9 @@ from transformers import AutoTokenizer
 from tau_bench.agents.base import Agent
 from tau_bench.agents.tool_calling_agent import RESPOND_ACTION_NAME, ToolCallingAgent
 from tau_bench.types import RunConfig, Action
-from sglang_tool_parser import parse_tools
 from slime.rollout.sglang_rollout import GenerateState
 from slime.utils.http_utils import post
+from openai_tool_adapter import create_openai_adapter
 
 class Status(Enum):
     COMPLETED = "completed"
@@ -37,7 +37,7 @@ def call_to_action_sglang(calls: List[Any], text_response: str
     # Default action if no action was found. 
     action = Action(name=RESPOND_ACTION_NAME, kwargs={"content": text_response})
     if calls:
-        if len(calls)>1:
+        if len(calls) > 1:
             print("Multiple tool calls identified, only taking first.")
         tool_call = calls[0]
         params = json.loads(tool_call["parameters"])
@@ -47,9 +47,19 @@ def call_to_action_sglang(calls: List[Any], text_response: str
             action = Action(
                 name=tool_call["name"],
                 kwargs=params)
-    return action 
+    return action
 
 class TrainableAgentMixin:
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Initialize OpenAI adapter
+        print(f"[TrainableAgentMixin] Initializing OpenAI adapter with {len(self.tools_info)} tools")
+        self.openai_adapter = create_openai_adapter(
+            tools_info=self.tools_info,
+            parser_type="qwen25"
+        )
+        print(f"[TrainableAgentMixin] OpenAI adapter initialized successfully")
+    
     async def asolve(
         self,
         env,
@@ -92,21 +102,23 @@ class TrainableAgentMixin:
         # Initialize result
         res = InteractionResult(prompt=prompt_text, reward=0, messages=[], info={})
         
-        def _get_token_delta(tokenizer:AutoTokenizer, messages: List[Dict]) -> Tuple[List[int], List[int]]:
+        def _get_token_delta(tokenizer: AutoTokenizer, messages: List[Dict]) -> Tuple[List[int], List[int]]:
             # tokenization logic taken from here: https://verl.readthedocs.io/en/v0.4.1/sglang_multiturn/multiturn.html 
             # to calculate the right token count in a multi-turn environment, use the delta between the last messages
             
             curr = tokenizer.apply_chat_template(messages, add_generation_prompt=False, tokenize=False)
+            token_ids = []
+            loss_mask = []
             # Case 1; last message is an assistant response. 
             if messages[-1]["role"] == "assistant":
                 prev = tokenizer.apply_chat_template(messages[:-1], add_generation_prompt=True, tokenize=False)
                 token_ids += tokenizer.encode(curr[len(prev):], add_special_tokens=False)
-                loss_mask += [1] * len(token_ids)  # Mask only the new assistant tokens
+                loss_mask += [1] * len(tokenizer.encode(curr[len(prev):], add_special_tokens=False))  # Mask only the new assistant tokens
             else:
                 # Case 2: last message is a tool response or environment observation. 
                 prev = tokenizer.apply_chat_template(messages[:-1], add_generation_prompt=False, tokenize=False)
                 token_ids += tokenizer.encode(curr[len(prev):], add_special_tokens=False)
-                loss_mask += [0] * len(token_ids)  # Mask
+                loss_mask += [0] * len(tokenizer.encode(curr[len(prev):], add_special_tokens=False))  # Mask
             return token_ids, loss_mask
 
         # Multi-turn interaction loop
@@ -124,10 +136,28 @@ class TrainableAgentMixin:
                 res.status = Status.ABORTED
                 return res
             response = output["text"]
-            # Extract tool call 
+            
+            # Use OpenAI adapter to parse tool calls
+            print(f"[TrainableAgentMixin] Using OpenAI adapter to parse response: {response[:100]}...")
             try:
-                parsed = parse_tools(response, self.tools_info, "qwen25")
+                # Get OpenAI format result
+                openai_result = self.openai_adapter.parse_response_to_openai_format(response)
+                print(f"[TrainableAgentMixin] OpenAI adapter result: success={openai_result['success']}")
+                
+                if not openai_result["success"]:
+                    print(f"[TrainableAgentMixin] OpenAI adapter failed: {openai_result['error']}")
+                    print(f"rollout response: {response} can not be parsed into tool calls {openai_result['error']}")
+                    res.status = Status.ABORTED
+                    return res
+                
+                # Extract parsed results
+                parsed = openai_result["parsed_result"]
+                openai_message = openai_result["openai_message"]
+                print(f"[TrainableAgentMixin] Successfully parsed - normal_text: '{parsed['normal_text']}', calls: {parsed['calls']}")
+                print(f"[TrainableAgentMixin] OpenAI message: {openai_message}")
+                
             except Exception as e:
+                print(f"[TrainableAgentMixin] Exception in OpenAI adapter: {e}")
                 print(f"rollout response: {response} can not be parsed into tool calls {e}")
                 res.status = Status.ABORTED
                 return res
@@ -140,8 +170,12 @@ class TrainableAgentMixin:
 
             # Step in environment with the tool call.
             agent_content, calls = parsed['normal_text'], parsed["calls"]
+            print(f"[TrainableAgentMixin] Creating action from - content: '{agent_content}', calls: {calls}")
             action = call_to_action_sglang(calls, agent_content)
+            print(f"[TrainableAgentMixin] Created action: {action}")
+            print(f"[TrainableAgentMixin] Stepping environment with action: {action.name}")
             env_response = env.step(action)
+            print(f"[TrainableAgentMixin] Environment response: reward={env_response.reward}, done={env_response.done}")
             # Update message history
             if action.name != RESPOND_ACTION_NAME:
                 messages.append(
@@ -184,6 +218,33 @@ class TrainableAgentMixin:
         res.response = "".join([msg.get("content", "") for msg in messages if msg["role"] == "assistant"])
         
         return res
+    
+    def get_openai_tools_format(self) -> List[Dict[str, Any]]:
+        """
+        Get OpenAI format tool definitions
+        
+        Returns:
+            List of OpenAI format tools
+        """
+        print(f"[TrainableAgentMixin] Getting OpenAI tools format for {len(self.tools_info)} tools")
+        tools = self.openai_adapter.get_openai_tools_format()
+        print(f"[TrainableAgentMixin] OpenAI tools format: {tools}")
+        return tools
+    
+    def get_openai_message_from_response(self, response: str) -> Dict[str, Any]:
+        """
+        Get OpenAI format message from response
+        
+        Args:
+            response: Raw response text from sglang
+            
+        Returns:
+            OpenAI format message result
+        """
+        print(f"[TrainableAgentMixin] Getting OpenAI message from response: {response[:100]}...")
+        result = self.openai_adapter.parse_response_to_openai_format(response)
+        print(f"[TrainableAgentMixin] OpenAI message result: {result}")
+        return result
 
 
 class TrainableToolCallingAgent(ToolCallingAgent, TrainableAgentMixin):
