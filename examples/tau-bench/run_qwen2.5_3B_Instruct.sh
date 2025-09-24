@@ -73,10 +73,10 @@ OPTIMIZER_ARGS=(
 )
 
 WANDB_ARGS=(
-   # --use-wandb
-   # --wandb-project slime-dev
-   # --wandb-group search-r1_qwen2.5-3B-test
-   # --wandb-key ${WANDB_KEY}
+   --use-wandb
+   --wandb-project tau-bench-test
+   --wandb-group search-r1_qwen2.5-3B-test
+   --wandb-key 2b9b314aca4fb1f7197f0cc0c9c9c595afbf5122
 )
 
 SGLANG_ARGS=(
@@ -117,6 +117,7 @@ ray job submit --address="http://127.0.0.1:8265" \
    --actor-num-nodes 1 \
    --actor-num-gpus-per-node 2 \
    --rollout-num-gpus 2 \
+   --debug-rollout-only \
    --colocate \
    ${MODEL_ARGS[@]} \
    ${CKPT_ARGS[@]} \

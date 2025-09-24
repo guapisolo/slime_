@@ -138,7 +138,7 @@ class TrainableAgentMixin:
             response = output["text"]
             
             # Use OpenAI adapter to parse tool calls
-            print(f"[TrainableAgentMixin] Using OpenAI adapter to parse response: {response[:100]}...")
+            print(f"[TrainableAgentMixin] Using OpenAI adapter to parse response: {response}...")
             try:
                 # Get OpenAI format result
                 openai_result = self.openai_adapter.parse_response_to_openai_format(response)
