@@ -50,16 +50,7 @@ def call_to_action_sglang(calls: List[Any], text_response: str
     return action
 
 class TrainableAgentMixin:
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # Initialize OpenAI adapter
-        print(f"[TrainableAgentMixin] Initializing OpenAI adapter with {len(self.tools_info)} tools")
-        self.openai_adapter = create_openai_adapter(
-            tools_info=self.tools_info,
-            parser_type="qwen25"
-        )
-        print(f"[TrainableAgentMixin] OpenAI adapter initialized successfully")
-    
+
     async def asolve(
         self,
         env,
@@ -121,6 +112,15 @@ class TrainableAgentMixin:
                 loss_mask += [0] * len(tokenizer.encode(curr[len(prev):], add_special_tokens=False))  # Mask
             return token_ids, loss_mask
 
+        def _build_result(res):
+            res.reward = total_reward
+            res.info = info
+            res.messages = messages
+            res.loss_mask = loss_masks
+            res.tokens = prompt_token_ids + response_token_ids
+            res.response = "".join([msg.get("content", "") for msg in messages if msg["role"] == "assistant"])
+            return res
+
         # Multi-turn interaction loop
         for _ in range(max_num_steps):
             # Prepare payload for sglang
@@ -134,7 +134,7 @@ class TrainableAgentMixin:
             # Check for abort
             if output["meta_info"]["finish_reason"]["type"] == "abort":
                 res.status = Status.ABORTED
-                return res
+                return _build_result(res)
             response = output["text"]
             
             # Use OpenAI adapter to parse tool calls
@@ -148,7 +148,7 @@ class TrainableAgentMixin:
                     print(f"[TrainableAgentMixin] OpenAI adapter failed: {openai_result['error']}")
                     print(f"rollout response: {response} can not be parsed into tool calls {openai_result['error']}")
                     res.status = Status.ABORTED
-                    return res
+                    return _build_result(res)
                 
                 # Extract parsed results
                 parsed = openai_result["parsed_result"]
@@ -160,7 +160,7 @@ class TrainableAgentMixin:
                 print(f"[TrainableAgentMixin] Exception in OpenAI adapter: {e}")
                 print(f"rollout response: {response} can not be parsed into tool calls {e}")
                 res.status = Status.ABORTED
-                return res
+                return _build_result(res)
 
             # Raw assistant response is the learnable target for the model. 
             messages.append({"role": "assistant", "content": response})
@@ -209,15 +209,7 @@ class TrainableAgentMixin:
         if not env_response.done:
             res.status = Status.TRUNCATED
             
-        # Build final result
-        res.reward = total_reward
-        res.info = info
-        res.messages = messages
-        res.loss_mask = loss_masks
-        res.tokens = prompt_token_ids + response_token_ids
-        res.response = "".join([msg.get("content", "") for msg in messages if msg["role"] == "assistant"])
-        
-        return res
+        return _build_result(res)
     
     def get_openai_tools_format(self) -> List[Dict[str, Any]]:
         """
@@ -287,6 +279,11 @@ class TrainableToolCallingAgent(ToolCallingAgent, TrainableAgentMixin):
             "top_p": 0.9,
             "top_k": 50,
         }
+        # Initialize OpenAI adapter
+        self.openai_adapter = create_openai_adapter(
+            tools_info=self.tools_info,
+            parser_type="qwen25"
+        )
     
     async def solve(
         self, env, task_index: Optional[int] = None, max_num_steps: int = 30
