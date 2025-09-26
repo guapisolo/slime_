@@ -117,18 +117,20 @@ class TrainableAgentMixin:
             res.info = info
             res.messages = messages
             
-            # Keep the full loss_mask with prompt (mask=0) + response (mask=1)
-            res.loss_mask = loss_masks
+            # Extract only the response part of loss_mask to align with Search-R1
+            # loss_masks contains: [prompt_tokens (mask=0)] + [response_tokens (mask=1)]
+            # We only want the response part for training, like Search-R1
+            response_loss_mask = loss_masks[len(prompt_token_ids):]
+            res.loss_mask = response_loss_mask
+            
             res.tokens = prompt_token_ids + response_token_ids
             res.response = "".join([msg.get("content", "") for msg in messages if msg["role"] == "assistant"])
             
-            # response_length should be the count of response tokens (mask=1)
-            # This is the length of the response part of the loss_mask
-            response_loss_mask_count = sum(1 for mask in loss_masks if mask == 1)
-            res.response_length = response_loss_mask_count
+            # response_length should equal the response loss mask length
+            res.response_length = len(response_loss_mask)
             
             print(f"[DEBUG] _build_result: response_length={res.response_length}, "
-                  f"response_loss_mask_count={response_loss_mask_count}, "
+                  f"response_loss_mask_len={len(response_loss_mask)}, "
                   f"total_loss_mask_len={len(loss_masks)}, "
                   f"prompt_token_len={len(prompt_token_ids)}, "
                   f"response_token_len={len(response_token_ids)}, "
