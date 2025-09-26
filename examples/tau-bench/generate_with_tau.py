@@ -29,7 +29,14 @@ def res_to_sample(res: InteractionResult) -> Sample:
         Status.TRUNCATED: "truncated",
         Status.ABORTED: "aborted",
     }.get(res.status)
-    return Sample(
+    
+    # Add debug logging
+    print(f"[DEBUG] res_to_sample: response_length="
+          f"{res.response_length if hasattr(res, 'response_length') else 'None'}, "
+          f"loss_mask_len={len(res.loss_mask) if res.loss_mask else 'None'}, "
+          f"tokens_len={len(res.tokens) if res.tokens else 'None'}")
+    
+    sample = Sample(
         prompt=res.prompt,
         tokens=res.tokens,
         response=res.response,
@@ -38,11 +45,26 @@ def res_to_sample(res: InteractionResult) -> Sample:
         status=status,
         metadata=res.info,
     )
+    
+    # Ensure response_length is set correctly
+    if hasattr(res, 'response_length'):
+        sample.response_length = res.response_length
+    else:
+        # Fallback: calculate from tokens if available
+        if res.tokens:
+            sample.response_length = len(res.tokens)
+        else:
+            sample.response_length = 0
+        print(f"[DEBUG] res_to_sample: Set response_length={sample.response_length}")
+    
+    return sample
 
 
 async def generate(args: Dict[str, Any], sample: Sample, sampling_params: dict):
     # Generate a full environment trajectory with Tau-Bench
-    assert not args.partial_rollout, f"Partial rollout is not supported for this function at the moment."
+    assert not args.partial_rollout, (
+        "Partial rollout is not supported for this function at the moment."
+    )
     env = get_env(
         tau_config.env,
         user_strategy=tau_config.user_strategy,

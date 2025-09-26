@@ -119,6 +119,11 @@ class TrainableAgentMixin:
             res.loss_mask = loss_masks
             res.tokens = prompt_token_ids + response_token_ids
             res.response = "".join([msg.get("content", "") for msg in messages if msg["role"] == "assistant"])
+            # Fix: Set response_length to match the actual response tokens
+            res.response_length = len(response_token_ids)
+            print(f"[DEBUG] _build_result: response_length={res.response_length}, "
+                  f"loss_mask_len={len(loss_masks)}, "
+                  f"response='{res.response[:100]}...'")
             return res
 
         # Multi-turn interaction loop
