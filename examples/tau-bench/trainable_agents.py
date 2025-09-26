@@ -123,7 +123,10 @@ class TrainableAgentMixin:
             res.response_length = len(response_token_ids)
             
             # Calculate response loss mask length (only the response part)
-            response_loss_mask_len = len(loss_masks) - len(prompt_token_ids)
+            # response_loss_mask_len should equal len(response_token_ids) since
+            # response_token_ids contains all response tokens and loss_masks contains
+            # prompt tokens (loss_mask=0) + response tokens (loss_mask=1)
+            response_loss_mask_len = len(response_token_ids)
             print(f"[DEBUG] _build_result: response_length={res.response_length}, "
                   f"response_loss_mask_len={response_loss_mask_len}, "
                   f"total_loss_mask_len={len(loss_masks)}, "
