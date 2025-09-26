@@ -116,21 +116,22 @@ class TrainableAgentMixin:
             res.reward = total_reward
             res.info = info
             res.messages = messages
+            
+            # Keep the full loss_mask with prompt (mask=0) + response (mask=1)
             res.loss_mask = loss_masks
             res.tokens = prompt_token_ids + response_token_ids
             res.response = "".join([msg.get("content", "") for msg in messages if msg["role"] == "assistant"])
-            # Fix: Set response_length to match the actual response tokens
-            res.response_length = len(response_token_ids)
             
-            # Calculate response loss mask length (only the response part)
-            # response_loss_mask_len should equal len(response_token_ids) since
-            # response_token_ids contains all response tokens and loss_masks contains
-            # prompt tokens (loss_mask=0) + response tokens (loss_mask=1)
-            response_loss_mask_len = len(response_token_ids)
+            # response_length should be the count of response tokens (mask=1)
+            # This is the length of the response part of the loss_mask
+            response_loss_mask_count = sum(1 for mask in loss_masks if mask == 1)
+            res.response_length = response_loss_mask_count
+            
             print(f"[DEBUG] _build_result: response_length={res.response_length}, "
-                  f"response_loss_mask_len={response_loss_mask_len}, "
+                  f"response_loss_mask_count={response_loss_mask_count}, "
                   f"total_loss_mask_len={len(loss_masks)}, "
                   f"prompt_token_len={len(prompt_token_ids)}, "
+                  f"response_token_len={len(response_token_ids)}, "
                   f"response='{res.response[:100]}...'")
             return res
 
