@@ -50,8 +50,14 @@ def res_to_sample(res: InteractionResult) -> Sample:
     if hasattr(res, 'response_length'):
         sample.response_length = res.response_length
     else:
-        # Fallback: calculate from tokens if available
-        if res.tokens:
+        # Fallback: calculate from loss_mask and tokens if available
+        if res.tokens and res.loss_mask:
+            # Calculate response length as the difference between total tokens and prompt tokens
+            # prompt tokens are those with loss_mask = 0, response tokens have loss_mask = 1
+            response_loss_mask_count = sum(1 for mask in res.loss_mask if mask == 1)
+            sample.response_length = response_loss_mask_count
+        elif res.tokens:
+            # If no loss_mask available, use total tokens as fallback (not ideal)
             sample.response_length = len(res.tokens)
         else:
             sample.response_length = 0
