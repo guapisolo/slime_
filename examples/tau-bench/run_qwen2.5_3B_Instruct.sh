@@ -75,14 +75,13 @@ OPTIMIZER_ARGS=(
 WANDB_ARGS=(
    --use-wandb
    --wandb-project tau-bench-test
-   --wandb-group search-r1_qwen2.5-3B-test
-   --wandb-key 2b9b314aca4fb1f7197f0cc0c9c9c595afbf5122
+   --wandb-group tau-bench_qwen2.5-3B-instruct-test
+   --wandb-key b61763ae7cd31cbd2ec4d898b3fd02b5b9db8a5c
 )
 
 SGLANG_ARGS=(
    --rollout-num-gpus-per-engine 2
    --sglang-mem-fraction-static 0.7
-   --sglang-tool-call-parser qwen25
 )
 
 MISC_ARGS=(

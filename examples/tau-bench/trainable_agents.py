@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 import json
+import logging
 
 from transformers import AutoTokenizer
 from tau_bench.agents.base import Agent
@@ -10,6 +11,9 @@ from tau_bench.types import RunConfig, Action
 from slime.rollout.sglang_rollout import GenerateState
 from slime.utils.http_utils import post
 from openai_tool_adapter import create_openai_adapter
+
+# Set up logger for this module
+logger = logging.getLogger(__name__)
 
 class Status(Enum):
     COMPLETED = "completed"
@@ -38,11 +42,11 @@ def call_to_action_sglang(calls: List[Any], text_response: str
     action = Action(name=RESPOND_ACTION_NAME, kwargs={"content": text_response})
     if calls:
         if len(calls) > 1:
-            print("Multiple tool calls identified, only taking first.")
+            logger.debug("Multiple tool calls identified, only taking first.")
         tool_call = calls[0]
         params = json.loads(tool_call["parameters"])
         if not isinstance(params, dict):
-            print(f"{params} does not follow dict structure for action")
+            logger.warning(f"{params} does not follow dict structure for action")
         else:
             action = Action(
                 name=tool_call["name"],
@@ -71,7 +75,8 @@ class TrainableAgentMixin:
         url = f"http://{rollout_args.sglang_router_ip}:{rollout_args.sglang_router_port}/generate"
 
         # Reset environment to the specified task
-        env_reset_res = env.reset(task_index=task_index)
+        if task_index is not None:
+            env_reset_res = env.reset(task_index=task_index)
         obs = env_reset_res.observation
         info = env_reset_res.info.model_dump()
         
@@ -84,7 +89,7 @@ class TrainableAgentMixin:
         # Calculate initial prompt tokens (loss_mask = 0)
         prompt_text = state.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, tools=self.tools_info)
         prompt_token_ids = state.tokenizer(prompt_text, add_special_tokens=False)["input_ids"]
-        loss_masks = [0] * len(prompt_token_ids)  # prompt tokens don't contribute to loss
+        loss_masks = []
         
         # Initialize response tracking
         response_token_ids = []
@@ -117,24 +122,19 @@ class TrainableAgentMixin:
             res.info = info
             res.messages = messages
             
-            # Extract only the response part of loss_mask to align with Search-R1
-            # loss_masks contains: [prompt_tokens (mask=0)] + [response_tokens (mask=1)]
-            # We only want the response part for training, like Search-R1
-            response_loss_mask = loss_masks[len(prompt_token_ids):]
-            res.loss_mask = response_loss_mask
+            res.loss_mask = loss_masks
             
             res.tokens = prompt_token_ids + response_token_ids
             res.response = "".join([msg.get("content", "") for msg in messages if msg["role"] == "assistant"])
             
             # response_length should equal the response loss mask length
-            res.response_length = len(response_loss_mask)
+            res.response_length = len(loss_masks)
             
-            print(f"[DEBUG] _build_result: response_length={res.response_length}, "
-                  f"response_loss_mask_len={len(response_loss_mask)}, "
-                  f"total_loss_mask_len={len(loss_masks)}, "
-                  f"prompt_token_len={len(prompt_token_ids)}, "
-                  f"response_token_len={len(response_token_ids)}, "
-                  f"response='{res.response[:100]}...'")
+            logger.debug(f"_build_result: response_length={res.response_length}, "
+                        f"response_loss_mask_len={len(loss_masks)}, "
+                        f"prompt_token_len={len(prompt_token_ids)}, "
+                        f"response_token_len={len(response_token_ids)}, "
+                        f"response='{res.response[:100]}...'")
             return res
 
         # Multi-turn interaction loop
@@ -154,27 +154,27 @@ class TrainableAgentMixin:
             response = output["text"]
             
             # Use OpenAI adapter to parse tool calls
-            print(f"[TrainableAgentMixin] Using OpenAI adapter to parse response: {response}...")
+            logger.debug(f"Using OpenAI adapter to parse response: {response[:100]}...")
             try:
                 # Get OpenAI format result
                 openai_result = self.openai_adapter.parse_response_to_openai_format(response)
-                print(f"[TrainableAgentMixin] OpenAI adapter result: success={openai_result['success']}")
+                logger.debug(f"OpenAI adapter result: success={openai_result['success']}")
                 
                 if not openai_result["success"]:
-                    print(f"[TrainableAgentMixin] OpenAI adapter failed: {openai_result['error']}")
-                    print(f"rollout response: {response} can not be parsed into tool calls {openai_result['error']}")
+                    logger.warning(f"OpenAI adapter failed: {openai_result['error']}")
+                    logger.warning(f"rollout response: {response} can not be parsed into tool calls {openai_result['error']}")
                     res.status = Status.ABORTED
                     return _build_result(res)
                 
                 # Extract parsed results
                 parsed = openai_result["parsed_result"]
                 openai_message = openai_result["openai_message"]
-                print(f"[TrainableAgentMixin] Successfully parsed - normal_text: '{parsed['normal_text']}', calls: {parsed['calls']}")
-                print(f"[TrainableAgentMixin] OpenAI message: {openai_message}")
+                logger.debug(f"Successfully parsed - normal_text: '{parsed['normal_text']}', calls: {parsed['calls']}")
+                logger.debug(f"OpenAI message: {openai_message}")
                 
             except Exception as e:
-                print(f"[TrainableAgentMixin] Exception in OpenAI adapter: {e}")
-                print(f"rollout response: {response} can not be parsed into tool calls {e}")
+                logger.warning(f"Exception in OpenAI adapter: {e}")
+                logger.warning(f"rollout response: {response} can not be parsed into tool calls {e}")
                 res.status = Status.ABORTED
                 return _build_result(res)
 
@@ -186,12 +186,18 @@ class TrainableAgentMixin:
 
             # Step in environment with the tool call.
             agent_content, calls = parsed['normal_text'], parsed["calls"]
-            print(f"[TrainableAgentMixin] Creating action from - content: '{agent_content}', calls: {calls}")
+            logger.debug(f"Creating action from - content: '{agent_content}', calls: {calls}")
             action = call_to_action_sglang(calls, agent_content)
-            print(f"[TrainableAgentMixin] Created action: {action}")
-            print(f"[TrainableAgentMixin] Stepping environment with action: {action.name}")
-            env_response = env.step(action)
-            print(f"[TrainableAgentMixin] Environment response: reward={env_response.reward}, done={env_response.done}")
+            logger.debug(f"Created action: {action}")
+            logger.debug(f"Stepping environment with action: {action.name}")
+            try:
+                env_response = env.step(action)
+            except Exception as e:
+                logger.warning(f"Envrionment step failed, this is usually related to the User simulation call.")
+                logger.warning(f"Error: {e}")
+                res.status = Status.ABORTED
+                return _build_result(res)
+            logger.debug(f"Environment response: reward={env_response.reward}, done={env_response.done}")
             # Update message history
             if action.name != RESPOND_ACTION_NAME:
                 messages.append(
@@ -234,9 +240,9 @@ class TrainableAgentMixin:
         Returns:
             List of OpenAI format tools
         """
-        print(f"[TrainableAgentMixin] Getting OpenAI tools format for {len(self.tools_info)} tools")
+        logger.debug(f"Getting OpenAI tools format for {len(self.tools_info)} tools")
         tools = self.openai_adapter.get_openai_tools_format()
-        print(f"[TrainableAgentMixin] OpenAI tools format: {tools}")
+        logger.debug(f"OpenAI tools format: {tools}")
         return tools
     
     def get_openai_message_from_response(self, response: str) -> Dict[str, Any]:
@@ -249,9 +255,9 @@ class TrainableAgentMixin:
         Returns:
             OpenAI format message result
         """
-        print(f"[TrainableAgentMixin] Getting OpenAI message from response: {response[:100]}...")
+        logger.debug(f"Getting OpenAI message from response: {response[:100]}...")
         result = self.openai_adapter.parse_response_to_openai_format(response)
-        print(f"[TrainableAgentMixin] OpenAI message result: {result}")
+        logger.debug(f"OpenAI message result: {result}")
         return result
 
 
