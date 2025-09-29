@@ -16,13 +16,13 @@ set -ex
 export PYTHONBUFFERED=16
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-source "${SCRIPT_DIR}/../../scripts/models/qwen2.5-3B.sh"
+source "${SCRIPT_DIR}/../../scripts/models/qwen3-14B.sh"
 
 CKPT_ARGS=(
-   --hf-checkpoint /root/Qwen2.5-3B-Instruct/
-   --ref-load /root/Qwen2.5-3B-Instruct_torch_dist/
-   --load /root/Qwen2.5-3B-Instruct_slime/
-   --save /root/Qwen2.5-3B-Instruct_slime/
+   --hf-checkpoint /root/Qwen3-14B/
+   --ref-load /root/Qwen3-14B_torch_dist/
+   --load /root/Qwen3-14B_slime/
+   --save /root/Qwen3-14B_slime/
    --save-interval 20
 )
 
@@ -40,7 +40,7 @@ ROLLOUT_ARGS=(
 )
 
 PERF_ARGS=(
-   --tensor-model-parallel-size 2
+   --tensor-model-parallel-size 4
    --sequence-parallel
    --pipeline-model-parallel-size 1
    --context-parallel-size 1
@@ -72,15 +72,15 @@ OPTIMIZER_ARGS=(
    --adam-beta2 0.98
 )
 
-WANDB_ARGS=(
-   --use-wandb
-   --wandb-project tau-bench-test
-   --wandb-group tau-bench_qwen2.5-3B-instruct-test
-   --wandb-key b61763ae7cd31cbd2ec4d898b3fd02b5b9db8a5c
-)
+# WANDB_ARGS=(
+#    --use-wandb
+#    --wandb-project tau-bench-test
+#    --wandb-group tau-bench_qwen3-14B
+#    --wandb-key 
+# )
 
 SGLANG_ARGS=(
-   --rollout-num-gpus-per-engine 2
+   --rollout-num-gpus-per-engine 1
    --sglang-mem-fraction-static 0.7
 )
 
@@ -113,8 +113,8 @@ ray job submit --address="http://127.0.0.1:8265" \
    --runtime-env-json="${RUNTIME_ENV_JSON}" \
    -- python3 train.py \
    --actor-num-nodes 1 \
-   --actor-num-gpus-per-node 2 \
-   --rollout-num-gpus 2 \
+   --actor-num-gpus-per-node 4 \
+   --rollout-num-gpus 4 \
    --colocate \
    ${MODEL_ARGS[@]} \
    ${CKPT_ARGS[@]} \

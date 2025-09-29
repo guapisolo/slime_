@@ -55,14 +55,34 @@ def call_to_action_sglang(calls: List[Any], text_response: str
                 kwargs=params)
     return action
 
+TOOL_INSTRUCTION = """ At each turn, you are allowed to call one or no function to assist with task execution using <tools></tools> XML tags.
+YOU MUST EXECUTE TOOLS TO MAKE ANY MODIFICATIONS OR CANCELLATIONS. Each tool call leads to a message returned by the system. 
+NEVER confirm execution to the user without seeing confirmation from the tool system. 
+"""
+
 class TrainableAgentMixin:
 
+    @weave.op()
+    def _reformulate_tool_call(self, text: str) -> str:
+        """
+        Default tool template assumes one or more function call. However for tau, at most one tool call 
+        or skip tool calls are the valid options. 
+        """
+        return text.replace("You may call one or more functions to assist with the user query.", TOOL_INSTRUCTION)
+        
     @weave.op()
     async def _call_llm(self, url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """
         Make an LLM call with Weave tracking.
         """
         return await post(url, payload)
+
+    @weave.op()
+    def _parse_tool(self, response: str):
+        """
+        Parse action from llm response string
+        """
+        return self.openai_adapter.parse_response_to_openai_format(response)
 
     @weave.op()
     async def _execute_tool(self, env, action: Action):
@@ -105,6 +125,8 @@ class TrainableAgentMixin:
         
         # Calculate initial prompt tokens (loss_mask = 0)
         prompt_text = state.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, tools=self.tools_info)
+        # Hack: the default template forces 1 or more tool uses, but we want 0 or 1.
+        prompt_text = self._reformulate_tool_call(prompt_text)
         prompt_token_ids = state.tokenizer(prompt_text, add_special_tokens=False)["input_ids"]
         loss_masks = []
         
@@ -158,7 +180,9 @@ class TrainableAgentMixin:
         with weave.thread():
             for _ in range(max_num_steps):
                 # Prepare payload for sglang
-                text_input = state.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False, tools=self.tools_info)
+                text_input = state.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, tools=self.tools_info)
+                # Hack: the default template forces 1 or more tool uses, but we want 0 or 1.
+                text_input = self._reformulate_tool_call(text_input)
                 payload = {
                     "text": text_input,
                     "sampling_params": sampling_params}
@@ -170,12 +194,15 @@ class TrainableAgentMixin:
                     res.status = Status.ABORTED
                     return _build_result(res)
                 response = output["text"]
+                # Hack: Not sure why but for qwen response will have end of conversation token at the end. 
+                if response.endswith("<|im_end|>"):
+                    response=response[:-10]
                 
                 # Use OpenAI adapter to parse tool calls
                 logger.debug(f"Using OpenAI adapter to parse response: {response[:100]}...")
                 try:
                     # Get OpenAI format result
-                    openai_result = self.openai_adapter.parse_response_to_openai_format(response)
+                    openai_result = self._parse_tool(response)
                     logger.debug(f"OpenAI adapter result: success={openai_result['success']}")
                     
                     if not openai_result["success"]:
@@ -226,7 +253,7 @@ class TrainableAgentMixin:
                         }
                     )
                 else:
-                    # Direct response, similar to ToolCallingAgent logic. 
+                    # Direct response from user, similar to ToolCallingAgent logic. 
                     messages.append(
                         {"role": "user", "content": env_response.observation},
                     )
