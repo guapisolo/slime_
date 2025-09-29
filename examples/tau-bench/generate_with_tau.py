@@ -2,6 +2,7 @@ import os
 import logging
 from typing import Any, Dict
 
+import weave
 from tau_bench.envs import get_env
 from tau_bench.types import RunConfig
 from trainable_agents import InteractionResult, Status, agent_factory
@@ -22,11 +23,12 @@ TAU_CONFIGS = {
     "user_model_provider": "gemini",
 }
 # Replace with your actual API key for user sim    
-GEMINI_API_KEY = "KEY" 
+GEMINI_API_KEY = "NONE" 
 os.environ["GEMINI_API_KEY"] = GEMINI_API_KEY
 tau_config = RunConfig(**TAU_CONFIGS)
 
 
+@weave.op()
 def res_to_sample(res: InteractionResult) -> Sample:
     status = {
         Status.COMPLETED: "completed",
@@ -68,6 +70,7 @@ def res_to_sample(res: InteractionResult) -> Sample:
     return sample
 
 
+@weave.op()
 async def generate(args: Dict[str, Any], sample: Sample, sampling_params: dict):
     # Generate a full environment trajectory with Tau-Bench
     assert not args.partial_rollout, (

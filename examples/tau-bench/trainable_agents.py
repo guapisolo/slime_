@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import json
 import logging
 
+import weave
 from transformers import AutoTokenizer
 from tau_bench.agents.base import Agent
 from tau_bench.agents.tool_calling_agent import RESPOND_ACTION_NAME, ToolCallingAgent
@@ -32,6 +33,7 @@ class InteractionResult:
     status: Status = Status.COMPLETED
 
 
+@weave.op()
 def call_to_action_sglang(calls: List[Any], text_response: str
 ) -> Action:
     """
@@ -55,6 +57,21 @@ def call_to_action_sglang(calls: List[Any], text_response: str
 
 class TrainableAgentMixin:
 
+    @weave.op()
+    async def _call_llm(self, url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Make an LLM call with Weave tracking.
+        """
+        return await post(url, payload)
+
+    @weave.op()
+    async def _execute_tool(self, env, action: Action):
+        """
+        Execute a tool/action with Weave tracking.
+        """
+        return env.step(action)
+
+    @weave.op()
     async def asolve(
         self,
         env,
@@ -138,94 +155,95 @@ class TrainableAgentMixin:
             return res
 
         # Multi-turn interaction loop
-        for _ in range(max_num_steps):
-            # Prepare payload for sglang
-            text_input = state.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False, tools=self.tools_info)
-            payload = {
-                "text": text_input,
-                "sampling_params": sampling_params}
-            # Send request to sglang server with tool call settings
-            output = await post(url, payload)
-        
-            # Check for abort
-            if output["meta_info"]["finish_reason"]["type"] == "abort":
-                res.status = Status.ABORTED
-                return _build_result(res)
-            response = output["text"]
+        with weave.thread():
+            for _ in range(max_num_steps):
+                # Prepare payload for sglang
+                text_input = state.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False, tools=self.tools_info)
+                payload = {
+                    "text": text_input,
+                    "sampling_params": sampling_params}
+                # Send request to sglang server with tool call settings
+                output = await self._call_llm(url, payload)
             
-            # Use OpenAI adapter to parse tool calls
-            logger.debug(f"Using OpenAI adapter to parse response: {response[:100]}...")
-            try:
-                # Get OpenAI format result
-                openai_result = self.openai_adapter.parse_response_to_openai_format(response)
-                logger.debug(f"OpenAI adapter result: success={openai_result['success']}")
-                
-                if not openai_result["success"]:
-                    logger.warning(f"OpenAI adapter failed: {openai_result['error']}")
-                    logger.warning(f"rollout response: {response} can not be parsed into tool calls {openai_result['error']}")
+                # Check for abort
+                if output["meta_info"]["finish_reason"]["type"] == "abort":
                     res.status = Status.ABORTED
                     return _build_result(res)
+                response = output["text"]
                 
-                # Extract parsed results
-                parsed = openai_result["parsed_result"]
-                openai_message = openai_result["openai_message"]
-                logger.debug(f"Successfully parsed - normal_text: '{parsed['normal_text']}', calls: {parsed['calls']}")
-                logger.debug(f"OpenAI message: {openai_message}")
+                # Use OpenAI adapter to parse tool calls
+                logger.debug(f"Using OpenAI adapter to parse response: {response[:100]}...")
+                try:
+                    # Get OpenAI format result
+                    openai_result = self.openai_adapter.parse_response_to_openai_format(response)
+                    logger.debug(f"OpenAI adapter result: success={openai_result['success']}")
+                    
+                    if not openai_result["success"]:
+                        logger.warning(f"OpenAI adapter failed: {openai_result['error']}")
+                        logger.warning(f"rollout response: {response} can not be parsed into tool calls {openai_result['error']}")
+                        res.status = Status.ABORTED
+                        return _build_result(res)
+                    
+                    # Extract parsed results
+                    parsed = openai_result["parsed_result"]
+                    openai_message = openai_result["openai_message"]
+                    logger.debug(f"Successfully parsed - normal_text: '{parsed['normal_text']}', calls: {parsed['calls']}")
+                    logger.debug(f"OpenAI message: {openai_message}")
+                    
+                except Exception as e:
+                    logger.warning(f"Exception in OpenAI adapter: {e}")
+                    logger.warning(f"rollout response: {response} can not be parsed into tool calls {e}")
+                    res.status = Status.ABORTED
+                    return _build_result(res)
+
+                # Raw assistant response is the learnable target for the model. 
+                messages.append({"role": "assistant", "content": response})
+                assistant_token_ids, assistant_loss_mask = _get_token_delta(state.tokenizer, messages)
+                response_token_ids.extend(assistant_token_ids)
+                loss_masks.extend(assistant_loss_mask)  
+
+                # Step in environment with the tool call.
+                agent_content, calls = parsed['normal_text'], parsed["calls"]
+                logger.debug(f"Creating action from - content: '{agent_content}', calls: {calls}")
+                action = call_to_action_sglang(calls, agent_content)
+                logger.debug(f"Created action: {action}")
+                logger.debug(f"Stepping environment with action: {action.name}")
+                try:
+                    env_response = await self._execute_tool(env, action)
+                except Exception as e:
+                    logger.warning(f"Envrionment step failed, this is usually related to the User simulation call.")
+                    logger.warning(f"Error: {e}")
+                    res.status = Status.ABORTED
+                    return _build_result(res)
+                logger.debug(f"Environment response: reward={env_response.reward}, done={env_response.done}")
+                # Update message history
+                if action.name != RESPOND_ACTION_NAME:
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "name": action.name,
+                            "content": env_response.observation,
+                        }
+                    )
+                else:
+                    # Direct response, similar to ToolCallingAgent logic. 
+                    messages.append(
+                        {"role": "user", "content": env_response.observation},
+                    )
+
+                env_token_ids, env_loss_mask = _get_token_delta(state.tokenizer, messages)
+                response_token_ids.extend(env_token_ids)
+                loss_masks.extend(env_loss_mask)  
+
+                # Update reward and info
+                total_reward = env_response.reward
+                info = {**info, **env_response.info.model_dump()}
+
                 
-            except Exception as e:
-                logger.warning(f"Exception in OpenAI adapter: {e}")
-                logger.warning(f"rollout response: {response} can not be parsed into tool calls {e}")
-                res.status = Status.ABORTED
-                return _build_result(res)
-
-            # Raw assistant response is the learnable target for the model. 
-            messages.append({"role": "assistant", "content": response})
-            assistant_token_ids, assistant_loss_mask = _get_token_delta(state.tokenizer, messages)
-            response_token_ids.extend(assistant_token_ids)
-            loss_masks.extend(assistant_loss_mask)  
-
-            # Step in environment with the tool call.
-            agent_content, calls = parsed['normal_text'], parsed["calls"]
-            logger.debug(f"Creating action from - content: '{agent_content}', calls: {calls}")
-            action = call_to_action_sglang(calls, agent_content)
-            logger.debug(f"Created action: {action}")
-            logger.debug(f"Stepping environment with action: {action.name}")
-            try:
-                env_response = env.step(action)
-            except Exception as e:
-                logger.warning(f"Envrionment step failed, this is usually related to the User simulation call.")
-                logger.warning(f"Error: {e}")
-                res.status = Status.ABORTED
-                return _build_result(res)
-            logger.debug(f"Environment response: reward={env_response.reward}, done={env_response.done}")
-            # Update message history
-            if action.name != RESPOND_ACTION_NAME:
-                messages.append(
-                    {
-                        "role": "tool",
-                        "name": action.name,
-                        "content": env_response.observation,
-                    }
-                )
-            else:
-                # Direct response, similar to ToolCallingAgent logic. 
-                messages.append(
-                    {"role": "user", "content": env_response.observation},
-                )
-
-            env_token_ids, env_loss_mask = _get_token_delta(state.tokenizer, messages)
-            response_token_ids.extend(env_token_ids)
-            loss_masks.extend(env_loss_mask)  
-
-            # Update reward and info
-            total_reward = env_response.reward
-            info = {**info, **env_response.info.model_dump()}
-
-            
-            # Check if done
-            if env_response.done:
-                res.status = Status.COMPLETED
-                break
+                # Check if done
+                if env_response.done:
+                    res.status = Status.COMPLETED
+                    break
         
         # Handle truncation
         if not env_response.done:
@@ -307,6 +325,7 @@ class TrainableToolCallingAgent(ToolCallingAgent, TrainableAgentMixin):
             parser_type="qwen25"
         )
     
+    @weave.op()
     async def solve(
         self, env, task_index: Optional[int] = None, max_num_steps: int = 30
     ) -> "SolveResult":

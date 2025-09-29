@@ -30,12 +30,12 @@ ROLLOUT_ARGS=(
    --prompt-data /root/tau-bench/retail_train_tasks.jsonl
    --input-key index
    --rollout-shuffle
-   --num-rollout 200
+   --num-rollout 500
    --rollout-batch-size 16
    --n-samples-per-prompt 8
    --rollout-max-response-len 512
    --rollout-temperature 0.8
-   --global-batch-size 32
+   --global-batch-size 128
    --balance-data
 )
 
@@ -76,7 +76,7 @@ WANDB_ARGS=(
    --use-wandb
    --wandb-project tau-bench-test
    --wandb-group tau-bench_qwen2.5-3B-instruct-test
-   --wandb-key b61763ae7cd31cbd2ec4d898b3fd02b5b9db8a5c
+   --wandb-key NONE
 )
 
 SGLANG_ARGS=(

@@ -12,8 +12,9 @@ cd slime
 pip install -e .
 # for tau bench 
 cd /root/
-git clone https://github.com/sierra-research/tau-bench
+git clone https:/github.com:JD-ETH/tau-bench.git
 cd tau-bench
+git checkout feature/litellm-retry
 pip install -e . 
 ```
 
