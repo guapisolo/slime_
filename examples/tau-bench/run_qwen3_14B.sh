@@ -33,10 +33,18 @@ ROLLOUT_ARGS=(
    --num-rollout 500
    --rollout-batch-size 16
    --n-samples-per-prompt 8
-   --rollout-max-response-len 512
+   --rollout-max-response-len 1024
    --rollout-temperature 0.8
    --global-batch-size 128
    --balance-data
+)
+
+EVAL_ARGS=(
+   --eval-interval 10
+   --eval-prompt-data gsm8k /root/tau-bench/retail_dev_tasks.jsonl
+   --n-samples-per-eval-prompt 1
+   --eval-max-response-len 1024
+   --eval-top-k 1
 )
 
 PERF_ARGS=(
@@ -72,12 +80,6 @@ OPTIMIZER_ARGS=(
    --adam-beta2 0.98
 )
 
-# WANDB_ARGS=(
-#    --use-wandb
-#    --wandb-project tau-bench-test
-#    --wandb-group tau-bench_qwen3-14B
-#    --wandb-key 
-# )
 
 SGLANG_ARGS=(
    --rollout-num-gpus-per-engine 1
@@ -100,6 +102,7 @@ CUSTOM_ARGS=(
 )
 # launch the master node of ray in container
 export MASTER_ADDR=${MASTER_ADDR:-"127.0.0.1"}
+export CUDA_VISIBLE_DEVICES=4,5,6,7
 ray start --head --node-ip-address ${MASTER_ADDR} --num-gpus 4 --disable-usage-stats --temp-dir /root/ray_temp 
 
 RUNTIME_ENV_JSON="{
@@ -124,6 +127,7 @@ ray job submit --address="http://127.0.0.1:8265" \
    ${DISTRIBUTED_ARGS[@]} \
    ${WANDB_ARGS[@]} \
    ${PERF_ARGS[@]} \
+   ${EVAL_ARGS[@]} \
    ${SGLANG_ARGS[@]} \
    ${MISC_ARGS[@]} \
    ${CUSTOM_ARGS[@]}

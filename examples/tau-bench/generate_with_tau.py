@@ -29,7 +29,7 @@ tau_config = RunConfig(**TAU_CONFIGS)
 
 
 @weave.op()
-def res_to_sample(res: InteractionResult) -> Sample:
+def res_to_sample(res: InteractionResult, task_index: int) -> Sample:
     status = {
         Status.COMPLETED: "completed",
         Status.TRUNCATED: "truncated",
@@ -43,6 +43,7 @@ def res_to_sample(res: InteractionResult) -> Sample:
                 f"tokens_len={len(res.tokens) if res.tokens else 'None'}")
     
     sample = Sample(
+        index=task_index,
         prompt=res.prompt,
         tokens=res.tokens,
         response=res.response,
@@ -96,7 +97,6 @@ async def generate(args: Dict[str, Any], sample: Sample, sampling_params: dict):
     # Samples are required to have prompt field. Instead of setting the actual sample, we set the index within the environment
     # for repeatability.
     res = await agent.asolve(env, agent.rollout_args, agent.sampling_params, task_index)
-    res = res_to_sample(res)
-    res.index = sample.index 
+    res = res_to_sample(res, task_index)
     logger.info(f"Finished agent-environment interaction in task {task_index}")
     return res
