@@ -66,7 +66,11 @@ def init_wandb_primary(args):
         print(f"W&B logs will be stored in: {args.wandb_dir}")
 
     wandb.init(**init_kwargs)
-    weave.init(args.wandb_project)
+    if args.wandb_team:
+        project = args.wandb_team+"/"+args.wandb_project
+    else:
+        project = args.wandb_project
+    weave.init(project)
 
     _init_wandb_common()
 
@@ -112,7 +116,11 @@ def init_wandb_secondary(args, wandb_run_id):
         init_kwargs["dir"] = args.wandb_dir
 
     wandb.init(**init_kwargs)
-    weave.init(args.wandb_project)
+    if args.wandb_team:
+        project = args.wandb_team+"/"+args.wandb_project
+    else:
+        project = args.wandb_project
+    weave.init(project)
 
     _init_wandb_common()
 

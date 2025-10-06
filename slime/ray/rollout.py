@@ -386,10 +386,10 @@ def _log_rollout_data(rollout_id, args, samples, rollout_time):
     sample_indices = torch.tensor([sample.index for sample in samples])
     if args.advantage_estimator in ["grpo", "gspo", "reinforce_plus_plus_baseline"]:
         if len(raw_rewards) == args.n_samples_per_prompt * args.rollout_batch_size:
-            rewards = rewards.reshape(-1, self.args.n_samples_per_prompt)
-            sample_indices = sample_indices.reshape(-1, self.args.n_samples_per_prompt)
+            rewards = raw_rewards.reshape(-1, args.n_samples_per_prompt)
+            sample_indices = sample_indices.reshape(-1, args.n_samples_per_prompt)
             # Make sure per group sample indices are identical. 
-            assert (sample_indices == sample_indices[:, 0].unsqueeze(1)).all(dim=1), f" {sample_indices} Per group sample indices are not identical."
+            assert (sample_indices == sample_indices[:, 0].unsqueeze(1)).all(dim=1).all(), f" {sample_indices} Per group sample indices are not identical."
             group_count, sample_per_group = rewards.shape
             # Collect statistics for each group, reward all zero, all one, and std value. 
             all_zeros = rewards.eq(0).all(dim=-1)

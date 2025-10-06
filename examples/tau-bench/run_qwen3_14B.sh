@@ -41,7 +41,7 @@ ROLLOUT_ARGS=(
 
 EVAL_ARGS=(
    --eval-interval 10
-   --eval-prompt-data gsm8k /root/tau-bench/retail_dev_tasks.jsonl
+   --eval-prompt-data retail-dev /root/tau-bench/retail_dev_tasks.jsonl
    --n-samples-per-eval-prompt 1
    --eval-max-response-len 1024
    --eval-top-k 1
