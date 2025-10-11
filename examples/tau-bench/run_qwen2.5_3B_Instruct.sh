@@ -72,12 +72,6 @@ OPTIMIZER_ARGS=(
    --adam-beta2 0.98
 )
 
-WANDB_ARGS=(
-   --use-wandb
-   --wandb-project tau-bench-test
-   --wandb-group tau-bench_qwen2.5-3B-instruct-test
-   --wandb-key b61763ae7cd31cbd2ec4d898b3fd02b5b9db8a5c
-)
 
 SGLANG_ARGS=(
    --rollout-num-gpus-per-engine 2

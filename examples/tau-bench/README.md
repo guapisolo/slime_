@@ -31,6 +31,7 @@ Initialize the Qwen2.5-3B-Instruct model needed for tool use:
 # hf checkpoint
 huggingface-cli download Qwen/Qwen2.5-3B-Instruct --local-dir /root/Qwen2.5-3B-Instruct
 huggingface-cli download Qwen/Qwen3-14B --local-dir /root/Qwen3-14B
+huggingface-cli download Qwen/Qwen3-4B-Instruct-2507 --local-dir /root/Qwen3-4B-Instruct-2507
 
 # mcore checkpoint
 cd /root/slime
@@ -46,6 +47,13 @@ PYTHONPATH=/root/Megatron-LM python tools/convert_hf_to_torch_dist.py \
     ${MODEL_ARGS[@]} \
     --hf-checkpoint /root/Qwen3-14B \
     --save /root/Qwen3-14B_torch_dist
+
+
+source scripts/models/qwen3-4B-Instruct.sh
+PYTHONPATH=/root/Megatron-LM python tools/convert_hf_to_torch_dist.py \
+    ${MODEL_ARGS[@]} \
+    --hf-checkpoint /root/Qwen3-4B-Instruct-2507 \
+    --save /root/Qwen3-4B-Instruct-2507_torch_dist
 ```
 
 ## Running the Script
@@ -77,4 +85,9 @@ bash examples/tau-bench/run_qwen2.5_3B_Instruct.sh
 ```bash
 cd /root/slime
 bash examples/tau-bench/run_qwen3_14B.sh
+```
+
+```bash
+cd /root/slime
+bash examples/tau-bench/run_qwen3_4B.sh
 ```

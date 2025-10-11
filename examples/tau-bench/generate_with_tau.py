@@ -71,7 +71,7 @@ def res_to_sample(res: InteractionResult, task_index: int) -> Sample:
     return sample
 
 
-@weave.op()
+@weave.op(tracing_sample_rate=0.1)
 async def generate(args: Dict[str, Any], sample: Sample, sampling_params: dict):
     # Generate a full environment trajectory with Tau-Bench
     assert not args.partial_rollout, (

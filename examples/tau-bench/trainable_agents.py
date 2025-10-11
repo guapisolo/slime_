@@ -62,7 +62,6 @@ NEVER confirm execution to the user without seeing confirmation from the tool sy
 
 class TrainableAgentMixin:
 
-    @weave.op()
     def _reformulate_tool_call(self, text: str) -> str:
         """
         Default tool template assumes one or more function call. However for tau, at most one tool call 
