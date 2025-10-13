@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 TAU_CONFIGS = {
     "env": "retail",  # Select between ["retail", "airline"]
     "agent": "tool-calling",  # Select between ["tool-calling", "act", "react", "few-shot"], only tool-calling implemented for now
-    "user_model": "gemini-2.0-flash-lite",  # Cheap Model for user simulator
+    "user_model": "gemini-2.5-flash-lite",  # Cheap Model for user simulator
     "task_split": "train",  # Select between ["train", "test", "dev"] for retail, ["test"] for airline
     "user_strategy": "llm",  # Select between ["llm", "react", "verify", "reflection"]
     "model_provider": "auto_router", # Unused, required
@@ -23,7 +23,7 @@ TAU_CONFIGS = {
     "user_model_provider": "gemini",
 }
 # Replace with your actual API key for user sim    
-GEMINI_API_KEY = "" 
+GEMINI_API_KEY = "NONE" 
 os.environ["GEMINI_API_KEY"] = GEMINI_API_KEY
 tau_config = RunConfig(**TAU_CONFIGS)
 

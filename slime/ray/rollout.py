@@ -465,15 +465,32 @@ def _log_rollout_data(rollout_id, args, samples, rollout_time):
             # Make sure per group sample indices are identical. 
             assert (sample_indices == sample_indices[:, 0].unsqueeze(1)).all(dim=1).all(), f" {sample_indices} Per group sample indices are not identical."
             group_count, sample_per_group = rewards.shape
-            # Collect statistics for each group, reward all zero, all one, and std value. 
+            # Collect pass@k statistics for each group
             all_zeros = rewards.eq(0).all(dim=-1)
             all_ones = rewards.eq(1).all(dim=-1)
-            std = rewards.std(dim=-1)
+            
+            # Calculate pass@k metrics dynamically for powers of 2
+            # pass@k is the probability that at least one of the first k samples passes
+            max_k = sample_per_group
+            k_values = []
+            current_k = 1
+            while current_k <= max_k:
+                k_values.append(current_k)
+                current_k *= 2
+            
+            for k in k_values:
+                if k == 1:
+                    # pass@1: probability that the first sample passes
+                    pass_at_k = rewards[:, 0].float().mean()
+                else:
+                    # pass@k: probability that at least one of the first k samples passes
+                    first_k_samples = rewards[:, :k]
+                    pass_at_k = (first_k_samples.sum(dim=-1) > 0).float().mean()
+                
+                log_dict[f"rollout/pass_at_{k}"] = pass_at_k.item()
+            
             log_dict["rollout/group_all_zeros"] = all_zeros.sum() / group_count
             log_dict["rollout/group_all_ones"] = all_ones.sum() / group_count
-            log_dict["rollout/group_std_p25"] = std.quantile(0.25)
-            log_dict["rollout/group_std_p50"] = std.quantile(0.50)
-            log_dict["rollout/group_std_p75"] = std.quantile(0.75)
     print(f"perf {rollout_id}: {log_dict}")
     step = (
         rollout_id
