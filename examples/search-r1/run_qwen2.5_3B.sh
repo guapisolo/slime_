@@ -105,6 +105,7 @@ CUSTOM_ARGS=(
    --custom-generate-function-path generate_with_search.generate
    --custom-rm-path generate_with_search.reward_func
 )
+
 # launch the master node of ray in container
 export MASTER_ADDR=${MASTER_ADDR:-"127.0.0.1"}
 ray start --head --node-ip-address ${MASTER_ADDR} --num-gpus 8 --disable-usage-stats
