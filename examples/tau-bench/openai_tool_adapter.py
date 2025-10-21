@@ -1,10 +1,12 @@
-from typing import Dict, Any, List, Optional
 import json
 import logging
 from dataclasses import dataclass
-from sglang_tool_parser import parse_tools
-from tau_bench.types import Action
+from typing import Any, Dict, List, Optional
+
 from tau_bench.agents.tool_calling_agent import RESPOND_ACTION_NAME
+from tau_bench.types import Action
+
+from sglang_tool_parser import parse_tools
 
 # Set up logger for this module
 logger = logging.getLogger(__name__)
@@ -62,14 +64,9 @@ class OpenAICompatibleToolCallAdapter:
         Raises:
             Exception: Thrown when parsing fails
         """
-        logger.debug(f"Starting to parse response: {response[:100]}...")
-        
         try:
             # Use existing parser to parse tool calls
-            logger.debug(f"Using parser type: {self.parser_type}")
             parsed = parse_tools(response, self.tools_info, self.parser_type)
-            logger.debug(f"Parsing successful. Normal text: '{parsed['normal_text']}'")
-            logger.debug(f"Found {len(parsed['calls'])} tool calls: {parsed['calls']}")
 
             # Extract parsing results
             normal_text = parsed['normal_text']
@@ -78,7 +75,6 @@ class OpenAICompatibleToolCallAdapter:
             # Convert to OpenAI format
             openai_message = self._convert_to_openai_message(
                 normal_text, calls)
-            logger.debug(f"OpenAI message created: {openai_message}")
 
             return {
                 "openai_message": openai_message,
@@ -110,11 +106,8 @@ class OpenAICompatibleToolCallAdapter:
         Returns:
             OpenAI format assistant message
         """
-        logger.debug(f"Converting to OpenAI format - normal_text: '{normal_text}', calls: {calls}")
-        
         if not calls:
             # No tool calls, return plain text response
-            logger.debug("No tool calls found, returning plain text response")
             return OpenAIAssistantMessage(
                 role="assistant",
                 content=normal_text,
@@ -122,10 +115,8 @@ class OpenAICompatibleToolCallAdapter:
             )
 
         # Convert tool calls to OpenAI format
-        logger.debug(f"Converting {len(calls)} tool calls to OpenAI format")
         openai_tool_calls = []
         for i, call in enumerate(calls):
-            logger.debug(f"Processing call {i}: {call}")
             openai_tool_call = OpenAIToolCall(
                 id=f"call_{i}_{call.get('name', 'unknown')}",
                 type="function",
@@ -134,7 +125,6 @@ class OpenAICompatibleToolCallAdapter:
                     "arguments": call.get('parameters', '{}')
                 }
             )
-            logger.debug(f"Created OpenAI tool call: {openai_tool_call}")
             openai_tool_calls.append(openai_tool_call)
 
         result = OpenAIAssistantMessage(
@@ -142,41 +132,8 @@ class OpenAICompatibleToolCallAdapter:
             content=normal_text if normal_text.strip() else None,
             tool_calls=openai_tool_calls
         )
-        logger.debug(f"Final OpenAI message: {result}")
         return result
 
-    def convert_to_action(
-        self,
-        response: str
-    ) -> Action:
-        """
-        Convert response to Action object (maintain compatibility with existing logic)
-
-        Args:
-            response: Raw response text from sglang
-
-        Returns:
-            Action object
-        """
-        logger.debug(f"Converting response to Action: {response[:100]}...")
-        
-        try:
-            parsed = parse_tools(response, self.tools_info, self.parser_type)
-            agent_content = parsed['normal_text']
-            calls = parsed['calls']
-            logger.debug(f"Parsed for Action - content: '{agent_content}', calls: {calls}")
-
-            action = self._call_to_action_sglang(calls, agent_content)
-            logger.debug(f"Created Action: {action}")
-            return action
-
-        except Exception as e:
-            logger.warning(f"Failed to convert response to action: {e}")
-            # Return default response action
-            default_action = Action(name=RESPOND_ACTION_NAME,
-                          kwargs={"content": response})
-            logger.debug(f"Returning default action: {default_action}")
-            return default_action
 
     def _call_to_action_sglang(self, calls: List[Any],
                                text_response: str) -> Action:
@@ -186,24 +143,18 @@ class OpenAICompatibleToolCallAdapter:
         This method replicates the original call_to_action_sglang logic,
         ensuring compatibility with existing code.
         """
-        logger.debug(f"Converting sglang calls to Action - calls: {calls}, text: '{text_response}'")
-        
         # Default action if no action found
         action = Action(name=RESPOND_ACTION_NAME,
                         kwargs={"content": text_response})
-        logger.debug(f"Default action created: {action}")
 
         if calls:
-            logger.debug(f"Processing {len(calls)} tool calls")
             if len(calls) > 1:
                 logger.debug("Multiple tool calls identified, only taking first.")
 
             tool_call = calls[0]
-            logger.debug(f"Processing tool call: {tool_call}")
             
             try:
                 params = json.loads(tool_call["parameters"])
-                logger.debug(f"Parsed parameters: {params}")
 
                 if not isinstance(params, dict):
                     logger.warning(f"{params} does not follow dict structure for action")
@@ -212,13 +163,9 @@ class OpenAICompatibleToolCallAdapter:
                         name=tool_call["name"],
                         kwargs=params
                     )
-                    logger.debug(f"Created tool action: {action}")
             except json.JSONDecodeError as e:
                 logger.warning(f"Failed to parse parameters as JSON: {e}")
-        else:
-            logger.debug("No tool calls found, using default action")
 
-        logger.debug(f"Final action: {action}")
         return action
 
     def get_openai_tools_format(self) -> List[Dict[str, Any]]:
@@ -242,21 +189,6 @@ class OpenAICompatibleToolCallAdapter:
 
         return openai_tools
 
-    def validate_response(self, response: str) -> bool:
-        """
-        Validate if response can be parsed correctly
-
-        Args:
-            response: Response text to validate
-
-        Returns:
-            Whether it can be parsed correctly
-        """
-        try:
-            parse_tools(response, self.tools_info, self.parser_type)
-            return True
-        except Exception:
-            return False
 
 
 # Usage examples and factory functions

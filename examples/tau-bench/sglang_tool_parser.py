@@ -1,10 +1,14 @@
-from typing import Dict, Any, List
-from sglang.srt.function_call.function_call_parser import FunctionCallParser
-from sglang.srt.managers.io_struct import Tool, Function 
+from typing import Any, Dict, List
 
-def parse_tools(response: str, tools: List[Dict[str, Any]], parser: str='qwen25'):
+from sglang.srt.function_call.function_call_parser import FunctionCallParser
+from sglang.srt.managers.io_struct import Function, Tool
+
+
+def parse_tools(
+    response: str, tools: List[Dict[str, Any]], parser: str = 'qwen25'
+):
     """
-    This function mimics the function call parser API from 
+    This function mimics the function call parser API from
     https://github.com/sgl-project/sglang/blob/main/python/sglang/srt/entrypoints/http_server.py#L952
     But running locally
     """

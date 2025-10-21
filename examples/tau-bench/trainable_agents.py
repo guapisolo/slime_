@@ -1,25 +1,33 @@
+import json
+import logging
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
-import json
-import logging
 
 import weave
 from transformers import AutoTokenizer
+
 from tau_bench.agents.base import Agent
-from tau_bench.agents.tool_calling_agent import RESPOND_ACTION_NAME, ToolCallingAgent
-from tau_bench.types import RunConfig, Action
+from tau_bench.agents.tool_calling_agent import (
+    RESPOND_ACTION_NAME,
+    ToolCallingAgent,
+)
+from tau_bench.types import Action, RunConfig
+
 from slime.rollout.sglang_rollout import GenerateState
 from slime.utils.http_utils import post
+
 from openai_tool_adapter import create_openai_adapter
 
 # Set up logger for this module
 logger = logging.getLogger(__name__)
 
+
 class Status(Enum):
     COMPLETED = "completed"
     TRUNCATED = "truncated"
     ABORTED = "aborted"
+
 
 @dataclass
 class InteractionResult:
@@ -34,7 +42,8 @@ class InteractionResult:
 
 
 @weave.op()
-def call_to_action_sglang(calls: List[Any], text_response: str
+def call_to_action_sglang(
+    calls: List[Any], text_response: str
 ) -> Action:
     """
     Convert sglang response message to Action, similar to original message_to_action
@@ -55,40 +64,140 @@ def call_to_action_sglang(calls: List[Any], text_response: str
                 kwargs=params)
     return action
 
-TOOL_INSTRUCTION = """ At each turn, you are allowed to call one or no function to assist with task execution using <tools></tools> XML tags.
-YOU MUST EXECUTE TOOLS TO MAKE ANY MODIFICATIONS OR CANCELLATIONS. Each tool call leads to a message returned by the system. 
-NEVER confirm execution to the user without seeing confirmation from the tool system. 
-"""
+
+TOOL_INSTRUCTION = (
+    " At each turn, you are allowed to call one or no function to assist "
+    "with task execution using <tools></tools> XML tags.\n"
+    "YOU MUST EXECUTE TOOLS TO MAKE ANY MODIFICATIONS OR CANCELLATIONS. "
+    "Each tool call leads to a message returned by the system.\n"
+    "NEVER confirm execution to the user without seeing confirmation "
+    "from the tool system.\n"
+)
 
 class TrainableAgentMixin:
+    """
+    Mixin class that provides trainable agent functionality for tau-bench environments.
+    
+    This mixin extends the original tau-bench agent with async LLM interaction
+    capabilities for reinforcement learning training using sglang servers.
+    """
 
     def _reformulate_tool_call(self, text: str) -> str:
         """
-        Default tool template assumes one or more function call. However for tau, at most one tool call 
-        or skip tool calls are the valid options. 
+        Reformulate tool call instruction for tau-bench environment.
+        
+        The default tool template assumes one or more function calls, but for
+        tau-bench, at most one tool call or skip tool calls are the valid options.
+        
+        Args:
+            text: Original tool instruction text
+            
+        Returns:
+            Reformulated tool instruction text
         """
-        return text.replace("You may call one or more functions to assist with the user query.", TOOL_INSTRUCTION)
+        return text.replace(
+            "You may call one or more functions to assist with the user query.",
+            TOOL_INSTRUCTION
+        )
         
     @weave.op()
     async def _call_llm(self, url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """
         Make an LLM call with Weave tracking.
+        
+        Args:
+            url: SGLang server URL
+            payload: Request payload containing text and sampling parameters
+            
+        Returns:
+            LLM response from sglang server
         """
         return await post(url, payload)
 
     @weave.op()
-    def _parse_tool(self, response: str):
+    def _parse_tool(self, response: str) -> Dict[str, Any]:
         """
-        Parse action from llm response string
+        Parse tool calls from LLM response string.
+        
+        Args:
+            response: Raw response text from sglang
+            
+        Returns:
+            Parsed tool call result in OpenAI format
         """
         return self.openai_adapter.parse_response_to_openai_format(response)
 
     @weave.op()
     async def _execute_tool(self, env, action: Action):
         """
-        Execute a tool/action with Weave tracking.
+        Execute a tool/action in the environment with Weave tracking.
+        
+        Args:
+            env: Tau-bench environment instance
+            action: Action to execute
+            
+        Returns:
+            Environment step result
         """
         return env.step(action)
+
+    def _initialize_environment(self, env, task_index: Optional[int]) -> Tuple[str, Dict[str, Any]]:
+        """
+        Initialize the environment and get initial observation.
+        
+        Args:
+            env: Tau-bench environment instance
+            task_index: Task index to reset to
+            
+        Returns:
+            Tuple of (observation, info)
+        """
+        if task_index is not None:
+            env_reset_res = env.reset(task_index=task_index)
+        else:
+            env_reset_res = env.reset()
+        return env_reset_res.observation, env_reset_res.info.model_dump()
+
+    def _build_initial_messages(self, obs: str) -> List[Dict[str, Any]]:
+        """
+        Build initial conversation messages.
+        
+        Args:
+            obs: Initial observation from environment
+            
+        Returns:
+            List of initial messages
+        """
+        return [
+            {"role": "system", "content": self.wiki},
+            {"role": "user", "content": obs}
+        ]
+
+    def _prepare_prompt_tokens(
+        self, state: GenerateState, messages: List[Dict[str, Any]]
+    ) -> Tuple[str, List[int]]:
+        """
+        Prepare prompt text and tokenize it.
+        
+        Args:
+            state: GenerateState instance with tokenizer
+            messages: Conversation messages
+            
+        Returns:
+            Tuple of (prompt_text, prompt_token_ids)
+        """
+        prompt_text = state.tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+            tools=self.tools_info
+        )
+        # Reformulate tool call instruction for tau-bench
+        prompt_text = self._reformulate_tool_call(prompt_text)
+        prompt_token_ids = state.tokenizer(
+            prompt_text, add_special_tokens=False
+        )["input_ids"]
+        return prompt_text, prompt_token_ids
 
     @weave.op()
     async def asolve(
@@ -100,172 +209,175 @@ class TrainableAgentMixin:
         max_num_steps: int = 30,
     ) -> InteractionResult:
         """
-        Extend original Agent to support async call interaction with LLM server.
+        Execute async agent-environment interaction for training.
+        
+        This method extends the original Agent to support async interaction with LLM
+        server for reinforcement learning training. It maintains conversation history,
+        tracks tokens, and records metadata for training purposes.
 
-        Given a URL and sampling parameters, this method should asynchronously
-        send a request to the LLM server and return the sampling result.
+        Args:
+            env: Tau-bench environment instance
+            rollout_args: Rollout configuration arguments
+            sampling_params: LLM sampling parameters
+            task_index: Specific task index to solve (optional)
+            max_num_steps: Maximum number of interaction steps
 
-        It book keeps the loss mask and records metadata for the request.
+        Returns:
+            InteractionResult containing the complete interaction trajectory
         """
+        # Initialize environment and state
         state = GenerateState(rollout_args)
-        url = f"http://{rollout_args.sglang_router_ip}:{rollout_args.sglang_router_port}/generate"
-
-        # Reset environment to the specified task
-        if task_index is not None:
-            env_reset_res = env.reset(task_index=task_index)
-        obs = env_reset_res.observation
-        info = env_reset_res.info.model_dump()
+        url = (
+            f"http://{rollout_args.sglang_router_ip}:"
+            f"{rollout_args.sglang_router_port}/generate"
+        )
         
-        # Build initial messages
-        messages: List[Dict[str, Any]] = [
-            {"role": "system", "content": self.wiki},
-            {"role": "user", "content": obs}
-        ]
+        # Get initial environment state
+        obs, info = self._initialize_environment(env, task_index)
         
-        # Calculate initial prompt tokens (loss_mask = 0)
-        prompt_text = state.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, tools=self.tools_info)
-        # Hack: the default template forces 1 or more tool uses, but we want 0 or 1.
-        prompt_text = self._reformulate_tool_call(prompt_text)
-        prompt_token_ids = state.tokenizer(prompt_text, add_special_tokens=False)["input_ids"]
+        # Build initial conversation
+        messages = self._build_initial_messages(obs)
+        prompt_text, prompt_token_ids = self._prepare_prompt_tokens(state, messages)
+        
+        # Initialize tracking variables
         loss_masks = []
-        
-        # Initialize response tracking
         response_token_ids = []
         total_reward = 0.0
         
         # Initialize result
         res = InteractionResult(prompt=prompt_text, reward=0, messages=[], info={})
         
-        def _get_token_delta(tokenizer: AutoTokenizer, messages: List[Dict]) -> Tuple[List[int], List[int]]:
-            # tokenization logic taken from here: https://verl.readthedocs.io/en/v0.4.1/sglang_multiturn/multiturn.html 
-            # to calculate the right token count in a multi-turn environment, use the delta between the last messages
-            
-            curr = tokenizer.apply_chat_template(messages, add_generation_prompt=False, tokenize=False)
-            token_ids = []
-            loss_mask = []
-            # Case 1; last message is an assistant response. 
-            if messages[-1]["role"] == "assistant":
-                prev = tokenizer.apply_chat_template(messages[:-1], add_generation_prompt=True, tokenize=False)
-                token_ids += tokenizer.encode(curr[len(prev):], add_special_tokens=False)
-                loss_mask += [1] * len(tokenizer.encode(curr[len(prev):], add_special_tokens=False))  # Mask only the new assistant tokens
-            else:
-                # Case 2: last message is a tool response or environment observation. 
-                prev = tokenizer.apply_chat_template(messages[:-1], add_generation_prompt=False, tokenize=False)
-                token_ids += tokenizer.encode(curr[len(prev):], add_special_tokens=False)
-                loss_mask += [0] * len(tokenizer.encode(curr[len(prev):], add_special_tokens=False))  # Mask
-            return token_ids, loss_mask
-
-        def _build_result(res):
-            res.reward = total_reward
-            res.info = info
-            res.messages = messages
-            
-            res.loss_mask = loss_masks
-            
-            res.tokens = prompt_token_ids + response_token_ids
-            res.response = "".join([msg.get("content", "") for msg in messages if msg["role"] == "assistant"])
-            
-            # response_length should equal the response loss mask length
-            res.response_length = len(loss_masks)
-            
-            logger.debug(f"_build_result: response_length={res.response_length}, "
-                        f"response_loss_mask_len={len(loss_masks)}, "
-                        f"prompt_token_len={len(prompt_token_ids)}, "
-                        f"response_token_len={len(response_token_ids)}, "
-                        f"response='{res.response[:100]}...'")
-            return res
-
         # Multi-turn interaction loop
         with weave.thread():
             for _ in range(max_num_steps):
                 # Prepare payload for sglang
-                text_input = state.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, tools=self.tools_info)
-                # Hack: the default template forces 1 or more tool uses, but we want 0 or 1.
+                text_input = state.tokenizer.apply_chat_template(
+                    messages,
+                    tokenize=False,
+                    add_generation_prompt=True,
+                    tools=self.tools_info
+                )
+                # Reformulate tool call instruction for tau-bench
                 text_input = self._reformulate_tool_call(text_input)
                 payload = {
                     "text": text_input,
-                    "sampling_params": sampling_params}
-                # Send request to sglang server with tool call settings
+                    "sampling_params": sampling_params
+                }
+                
+                # Send request to sglang server
                 output = await self._call_llm(url, payload)
-            
+                
                 # Check for abort
                 if output["meta_info"]["finish_reason"]["type"] == "abort":
                     res.status = Status.ABORTED
-                    return _build_result(res)
-                response = output["text"]
-                # Hack: Not sure why but for qwen response will have end of conversation token at the end. 
-                if response.endswith("<|im_end|>"):
-                    response=response[:-10]
+                    return self._build_final_result(
+                        res, total_reward, info, messages, loss_masks,
+                        prompt_token_ids, response_token_ids
+                    )
                 
-                # Use OpenAI adapter to parse tool calls
+                response = output["text"]
+                # Remove end of conversation token if present
+                if response.endswith("<|im_end|>"):
+                    response = response[:-10]
+                
+                # Parse tool calls using OpenAI adapter
                 logger.debug(f"Using OpenAI adapter to parse response: {response[:100]}...")
                 try:
-                    # Get OpenAI format result
                     openai_result = self._parse_tool(response)
                     logger.debug(f"OpenAI adapter result: success={openai_result['success']}")
                     
                     if not openai_result["success"]:
                         logger.warning(f"OpenAI adapter failed: {openai_result['error']}")
-                        logger.warning(f"rollout response: {response} can not be parsed into tool calls {openai_result['error']}")
+                        logger.warning(
+                            f"rollout response: {response} can not be parsed into "
+                            f"tool calls {openai_result['error']}"
+                        )
                         res.status = Status.ABORTED
-                        return _build_result(res)
+                        return self._build_final_result(
+                            res, total_reward, info, messages, loss_masks,
+                            prompt_token_ids, response_token_ids
+                        )
                     
                     # Extract parsed results
                     parsed = openai_result["parsed_result"]
-                    openai_message = openai_result["openai_message"]
-                    logger.debug(f"Successfully parsed - normal_text: '{parsed['normal_text']}', calls: {parsed['calls']}")
-                    logger.debug(f"OpenAI message: {openai_message}")
+                    logger.debug(
+                        f"Successfully parsed - normal_text: '{parsed['normal_text']}', "
+                        f"calls: {parsed['calls']}"
+                    )
                     
                 except Exception as e:
                     logger.warning(f"Exception in OpenAI adapter: {e}")
-                    logger.warning(f"rollout response: {response} can not be parsed into tool calls {e}")
+                    logger.warning(
+                        f"rollout response: {response} can not be parsed into "
+                        f"tool calls {e}"
+                    )
                     res.status = Status.ABORTED
-                    return _build_result(res)
+                    return self._build_final_result(
+                        res, total_reward, info, messages, loss_masks,
+                        prompt_token_ids, response_token_ids
+                    )
 
-                # Raw assistant response is the learnable target for the model. 
+                # Add assistant response to conversation
                 messages.append({"role": "assistant", "content": response})
-                assistant_token_ids, assistant_loss_mask = _get_token_delta(state.tokenizer, messages)
+                assistant_token_ids, assistant_loss_mask = self._get_token_delta(
+                    state.tokenizer, messages
+                )
                 response_token_ids.extend(assistant_token_ids)
-                loss_masks.extend(assistant_loss_mask)  
+                loss_masks.extend(assistant_loss_mask)
 
-                # Step in environment with the tool call.
+                # Execute action in environment
                 agent_content, calls = parsed['normal_text'], parsed["calls"]
-                logger.debug(f"Creating action from - content: '{agent_content}', calls: {calls}")
+                logger.debug(
+                    f"Creating action from - content: '{agent_content}', "
+                    f"calls: {calls}"
+                )
                 action = call_to_action_sglang(calls, agent_content)
                 logger.debug(f"Created action: {action}")
-                logger.debug(f"Stepping environment with action: {action.name}")
+                
                 try:
                     env_response = await self._execute_tool(env, action)
                 except Exception as e:
-                    logger.warning(f"Envrionment step failed, this is usually related to the User simulation call.")
+                    logger.warning(
+                        "Environment step failed, this is usually related to "
+                        "the User simulation call."
+                    )
                     logger.warning(f"Error: {e}")
                     res.status = Status.ABORTED
-                    return _build_result(res)
-                logger.debug(f"Environment response: reward={env_response.reward}, done={env_response.done}")
-                # Update message history
+                    return self._build_final_result(
+                        res, total_reward, info, messages, loss_masks,
+                        prompt_token_ids, response_token_ids
+                    )
+                
+                logger.debug(
+                    f"Environment response: reward={env_response.reward}, "
+                    f"done={env_response.done}"
+                )
+                
+                # Update message history based on action type
                 if action.name != RESPOND_ACTION_NAME:
-                    messages.append(
-                        {
-                            "role": "tool",
-                            "name": action.name,
-                            "content": env_response.observation,
-                        }
-                    )
+                    messages.append({
+                        "role": "tool",
+                        "name": action.name,
+                        "content": env_response.observation,
+                    })
                 else:
-                    # Direct response from user, similar to ToolCallingAgent logic. 
-                    messages.append(
-                        {"role": "user", "content": env_response.observation},
-                    )
+                    # Direct response from user
+                    messages.append({
+                        "role": "user", 
+                        "content": env_response.observation
+                    })
 
-                env_token_ids, env_loss_mask = _get_token_delta(state.tokenizer, messages)
+                # Update token tracking
+                env_token_ids, env_loss_mask = self._get_token_delta(
+                    state.tokenizer, messages
+                )
                 response_token_ids.extend(env_token_ids)
-                loss_masks.extend(env_loss_mask)  
+                loss_masks.extend(env_loss_mask)
 
                 # Update reward and info
                 total_reward = env_response.reward
                 info = {**info, **env_response.info.model_dump()}
 
-                
                 # Check if done
                 if env_response.done:
                     res.status = Status.COMPLETED
@@ -275,34 +387,103 @@ class TrainableAgentMixin:
         if not env_response.done:
             res.status = Status.TRUNCATED
             
-        return _build_result(res)
-    
-    def get_openai_tools_format(self) -> List[Dict[str, Any]]:
+        return self._build_final_result(
+            res, total_reward, info, messages, loss_masks,
+            prompt_token_ids, response_token_ids
+        )
+
+    def _get_token_delta(
+        self, tokenizer: AutoTokenizer, messages: List[Dict]
+    ) -> Tuple[List[int], List[int]]:
         """
-        Get OpenAI format tool definitions
+        Calculate token delta for multi-turn conversations.
         
-        Returns:
-            List of OpenAI format tools
-        """
-        logger.debug(f"Getting OpenAI tools format for {len(self.tools_info)} tools")
-        tools = self.openai_adapter.get_openai_tools_format()
-        logger.debug(f"OpenAI tools format: {tools}")
-        return tools
-    
-    def get_openai_message_from_response(self, response: str) -> Dict[str, Any]:
-        """
-        Get OpenAI format message from response
+        Tokenization logic adapted from:
+        https://verl.readthedocs.io/en/v0.4.1/sglang_multiturn/multiturn.html
+        to calculate the right token count in a multi-turn environment using
+        delta between messages.
         
         Args:
-            response: Raw response text from sglang
+            tokenizer: Tokenizer instance
+            messages: Conversation messages
             
         Returns:
-            OpenAI format message result
+            Tuple of (token_ids, loss_mask)
         """
-        logger.debug(f"Getting OpenAI message from response: {response[:100]}...")
-        result = self.openai_adapter.parse_response_to_openai_format(response)
-        logger.debug(f"OpenAI message result: {result}")
-        return result
+        curr = tokenizer.apply_chat_template(
+            messages, add_generation_prompt=False, tokenize=False
+        )
+        token_ids = []
+        loss_mask = []
+        
+        # Case 1: last message is an assistant response
+        if messages[-1]["role"] == "assistant":
+            prev = tokenizer.apply_chat_template(
+                messages[:-1], add_generation_prompt=True, tokenize=False
+            )
+            new_tokens = tokenizer.encode(
+                curr[len(prev):], add_special_tokens=False
+            )
+            token_ids += new_tokens
+            loss_mask += [1] * len(new_tokens)  # Mask only the new assistant tokens
+        else:
+            # Case 2: last message is a tool response or environment observation
+            prev = tokenizer.apply_chat_template(
+                messages[:-1], add_generation_prompt=False, tokenize=False
+            )
+            new_tokens = tokenizer.encode(
+                curr[len(prev):], add_special_tokens=False
+            )
+            token_ids += new_tokens
+            loss_mask += [0] * len(new_tokens)  # Don't mask environment/tool tokens
+            
+        return token_ids, loss_mask
+
+    def _build_final_result(
+        self,
+        res: InteractionResult,
+        total_reward: float,
+        info: Dict[str, Any],
+        messages: List[Dict[str, Any]],
+        loss_masks: List[int],
+        prompt_token_ids: List[int],
+        response_token_ids: List[int]
+    ) -> InteractionResult:
+        """
+        Build the final interaction result with all collected data.
+        
+        Args:
+            res: InteractionResult instance to populate
+            total_reward: Total reward accumulated during interaction
+            info: Environment info dictionary
+            messages: Complete conversation messages
+            loss_masks: Loss masks for training
+            prompt_token_ids: Prompt token IDs
+            response_token_ids: Response token IDs
+            
+        Returns:
+            Populated InteractionResult
+        """
+        res.reward = total_reward
+        res.info = info
+        res.messages = messages
+        res.loss_mask = loss_masks
+        res.tokens = prompt_token_ids + response_token_ids
+        res.response = "".join([
+            msg.get("content", "") for msg in messages
+            if msg["role"] == "assistant"
+        ])
+        res.response_length = len(loss_masks)
+        
+        logger.debug(
+            f"_build_final_result: response_length={res.response_length}, "
+            f"response_loss_mask_len={len(loss_masks)}, "
+            f"prompt_token_len={len(prompt_token_ids)}, "
+            f"response_token_len={len(response_token_ids)}, "
+            f"response='{res.response[:100]}...'"
+        )
+        return res
+    
 
 
 class TrainableToolCallingAgent(ToolCallingAgent, TrainableAgentMixin):
@@ -351,30 +532,11 @@ class TrainableToolCallingAgent(ToolCallingAgent, TrainableAgentMixin):
             parser_type="qwen25"
         )
     
-    @weave.op()
-    async def solve(
-        self, env, task_index: Optional[int] = None, max_num_steps: int = 30
-    ) -> "SolveResult":
-        """
-        Async solve method that uses our new asolve implementation.
-        This provides a simple interface for evaluation or standalone usage.
-        """
-        # Call our async asolve method using instance variables
-        interaction_result = await self.asolve(env, self.rollout_args, self.sampling_params, task_index, max_num_steps)
-        
-        # Convert InteractionResult back to SolveResult format
-        from tau_bench.types import SolveResult
-        return SolveResult(
-            reward=interaction_result.reward,
-            info=interaction_result.info,
-            messages=interaction_result.messages,
-            total_cost=0.0,  # We don't track cost in the new implementation
-        )
 
 
 def agent_factory(
-    tools_info: List[Dict[str, Any]], 
-    wiki, 
+    tools_info: List[Dict[str, Any]],
+    wiki,
     config: RunConfig,
     rollout_args: Optional[Dict[str, Any]] = None,
     sampling_params: Optional[Dict[str, Any]] = None
@@ -390,4 +552,6 @@ def agent_factory(
             sampling_params=sampling_params,
         )
     else:
-        raise NotImplementedError(f"Unsupported agent strategy: {config.agent_strategy}")
+        raise NotImplementedError(
+            f"Unsupported agent strategy: {config.agent_strategy}"
+        )
