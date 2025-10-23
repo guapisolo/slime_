@@ -402,12 +402,28 @@ def train_one_step(
             old_stage = os.environ["ROUTING_REPLAY_STAGE"]
             os.environ["ROUTING_REPLAY_STAGE"] = "replay_forward"
 
+        loss_mask = None
+        mtp_kwargs = {}
+
+        # If enabling MTP training: trigger MTP loss inside Megatron while returning logits
+        # for the target model's loss.
+        if getattr(args, "enable_mtp_training", False):
+            # TODO: have to add loss_mask for MTP training.
+            loss_mask = None
+            mtp_kwargs = {
+                # We have to set labels to tokens for MTP training, to point out samples to train.
+                "mtp_labels": batch["tokens"],
+                # TODO: Detach hidden states on target model.
+                # "mtp_detach_hidden_states": True,
+            }
         output_tensor = model(
             input_ids=batch["tokens"],
             position_ids=None,
             attention_mask=None,
             labels=None,
             packed_seq_params=batch["packed_seq_params"],
+            loss_mask=loss_mask,
+            mtp_kwargs=mtp_kwargs,
         )
 
         if os.environ.get("ENABLE_ROUTING_REPLAY", "0") == "1":
