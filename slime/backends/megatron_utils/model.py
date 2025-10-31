@@ -231,7 +231,7 @@ def forward_only(
     config = get_model_config(model[0])
 
     def forward_step(
-        data_iterator: DataIterator, model: GPTModel
+        data_iterator: DataIterator, model: GPTModel, return_schedule_plan: bool = False
     ) -> tuple[torch.Tensor, Callable[[torch.Tensor], dict[str, list[torch.Tensor]]]]:
         """Forward step used by Megatron's pipeline engine.
 
@@ -244,6 +244,8 @@ def forward_only(
             Output tensor(s) and a callable that computes and packages results
             to be collected by the engine.
         """
+
+        assert not return_schedule_plan, "forward_only step should never return schedule plan"
 
         # Get the batch.
         batch = get_batch(data_iterator, ["tokens", "total_lengths", "response_lengths"])
@@ -365,7 +367,7 @@ def train_one_step(
         custom_before_train_step_hook = load_function(args.custom_megatron_before_train_step_hook_path)
         custom_before_train_step_hook(args, rollout_id, step_id, model, optimizer, opt_param_scheduler)
 
-    def forward_step(data_iterator: DataIterator, model: GPTModel) -> tuple[
+    def forward_step(data_iterator: DataIterator, model: GPTModel, return_schedule_plan: bool = False) -> tuple[
         torch.Tensor,
         Callable[[torch.Tensor], tuple[torch.Tensor, int, dict[str, torch.Tensor | list[str]]]],
     ]:
@@ -447,15 +449,28 @@ def train_one_step(
                 # TODO: Detach hidden states on target model.
                 # "mtp_detach_hidden_states": True,
             }
-        output_tensor = model(
-            input_ids=batch["tokens"],
-            position_ids=None,
-            attention_mask=None,
-            labels=None,
-            packed_seq_params=batch["packed_seq_params"],
-            loss_mask=loss_mask,
-            mtp_kwargs=mtp_kwargs,
-        )
+
+        if return_schedule_plan:
+            assert (
+                args.overlap_moe_expert_parallel_comm
+            ), "overlap_moe_expert_parallel_comm must be enabled to return the schedule plan"
+            output_tensor = model.build_schedule_plan(
+                input_ids=batch["tokens"],
+                position_ids=None,
+                attention_mask=None,
+                labels=None,
+                packed_seq_params=batch["packed_seq_params"],
+            )
+        else:
+            output_tensor = model(
+                input_ids=batch["tokens"],
+                position_ids=None,
+                attention_mask=None,
+                labels=None,
+                packed_seq_params=batch["packed_seq_params"],
+                loss_mask=loss_mask,
+                mtp_kwargs=mtp_kwargs,
+            )
 
         if os.environ.get("ENABLE_ROUTING_REPLAY", "0") == "1":
             os.environ["ROUTING_REPLAY_STAGE"] = old_stage
