@@ -127,7 +127,9 @@ class RolloutManager:
         if self.args.load_debug_rollout_data:
             data = torch.load(
                 open(self.args.load_debug_rollout_data.format(rollout_id=rollout_id), "rb"),
+                weights_only=False,
             )["samples"]
+            print(f"load debug rollout data: {data}")
             data = [Sample.from_dict(sample) for sample in data]
             metrics = None
         else:

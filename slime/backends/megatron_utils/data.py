@@ -77,6 +77,7 @@ def get_batch(
         max_seqlen_kv=max_seqlen,
         qkv_format="thd",
     )
+    print("packed_seq_params: ", packed_seq_params)
 
     tokens = tokens.unsqueeze(0)
     batch["tokens"] = tokens

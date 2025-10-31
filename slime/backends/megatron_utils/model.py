@@ -446,6 +446,8 @@ def train_one_step(
                 "mtp_labels": batch["tokens"],
                 # TODO: Detach hidden states on target model.
                 # "mtp_detach_hidden_states": True,
+                # "id": 2,
+                "id": rollout_id,
             }
         output_tensor = model(
             input_ids=batch["tokens"],
