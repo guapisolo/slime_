@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
-import weave
 from transformers import AutoTokenizer
 
 from tau_bench.agents.base import Agent
@@ -41,7 +40,6 @@ class InteractionResult:
     status: Status = Status.COMPLETED
 
 
-@weave.op()
 def call_to_action_sglang(
     calls: List[Any], text_response: str
 ) -> Action:
@@ -100,10 +98,9 @@ class TrainableAgentMixin:
             TOOL_INSTRUCTION
         )
         
-    @weave.op()
     async def _call_llm(self, url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Make an LLM call with Weave tracking.
+        Make an LLM call tracking.
         
         Args:
             url: SGLang server URL
@@ -114,7 +111,6 @@ class TrainableAgentMixin:
         """
         return await post(url, payload)
 
-    @weave.op()
     def _parse_tool(self, response: str) -> Dict[str, Any]:
         """
         Parse tool calls from LLM response string.
@@ -127,10 +123,9 @@ class TrainableAgentMixin:
         """
         return self.openai_adapter.parse_response_to_openai_format(response)
 
-    @weave.op()
     async def _execute_tool(self, env, action: Action):
         """
-        Execute a tool/action in the environment with Weave tracking.
+        Execute a tool/action in the environment.
         
         Args:
             env: Tau-bench environment instance
@@ -199,7 +194,6 @@ class TrainableAgentMixin:
         )["input_ids"]
         return prompt_text, prompt_token_ids
 
-    @weave.op()
     async def asolve(
         self,
         env,
@@ -248,140 +242,139 @@ class TrainableAgentMixin:
         res = InteractionResult(prompt=prompt_text, reward=0, messages=[], info={})
         
         # Multi-turn interaction loop
-        with weave.thread():
-            for _ in range(max_num_steps):
-                # Prepare payload for sglang
-                text_input = state.tokenizer.apply_chat_template(
-                    messages,
-                    tokenize=False,
-                    add_generation_prompt=True,
-                    tools=self.tools_info
+        for _ in range(max_num_steps):
+            # Prepare payload for sglang
+            text_input = state.tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
+                tools=self.tools_info
+            )
+            # Reformulate tool call instruction for tau-bench
+            text_input = self._reformulate_tool_call(text_input)
+            payload = {
+                "text": text_input,
+                "sampling_params": sampling_params
+            }
+            
+            # Send request to sglang server
+            output = await self._call_llm(url, payload)
+            
+            # Check for abort
+            if output["meta_info"]["finish_reason"]["type"] == "abort":
+                res.status = Status.ABORTED
+                return self._build_final_result(
+                    res, total_reward, info, messages, loss_masks,
+                    prompt_token_ids, response_token_ids
                 )
-                # Reformulate tool call instruction for tau-bench
-                text_input = self._reformulate_tool_call(text_input)
-                payload = {
-                    "text": text_input,
-                    "sampling_params": sampling_params
-                }
+            
+            response = output["text"]
+            # Remove end of conversation token if present
+            if response.endswith("<|im_end|>"):
+                response = response[:-10]
+            
+            # Parse tool calls using OpenAI adapter
+            logger.debug(f"Using OpenAI adapter to parse response: {response[:100]}...")
+            try:
+                openai_result = self._parse_tool(response)
+                logger.debug(f"OpenAI adapter result: success={openai_result['success']}")
                 
-                # Send request to sglang server
-                output = await self._call_llm(url, payload)
-                
-                # Check for abort
-                if output["meta_info"]["finish_reason"]["type"] == "abort":
-                    res.status = Status.ABORTED
-                    return self._build_final_result(
-                        res, total_reward, info, messages, loss_masks,
-                        prompt_token_ids, response_token_ids
-                    )
-                
-                response = output["text"]
-                # Remove end of conversation token if present
-                if response.endswith("<|im_end|>"):
-                    response = response[:-10]
-                
-                # Parse tool calls using OpenAI adapter
-                logger.debug(f"Using OpenAI adapter to parse response: {response[:100]}...")
-                try:
-                    openai_result = self._parse_tool(response)
-                    logger.debug(f"OpenAI adapter result: success={openai_result['success']}")
-                    
-                    if not openai_result["success"]:
-                        logger.warning(f"OpenAI adapter failed: {openai_result['error']}")
-                        logger.warning(
-                            f"rollout response: {response} can not be parsed into "
-                            f"tool calls {openai_result['error']}"
-                        )
-                        res.status = Status.ABORTED
-                        return self._build_final_result(
-                            res, total_reward, info, messages, loss_masks,
-                            prompt_token_ids, response_token_ids
-                        )
-                    
-                    # Extract parsed results
-                    parsed = openai_result["parsed_result"]
-                    logger.debug(
-                        f"Successfully parsed - normal_text: '{parsed['normal_text']}', "
-                        f"calls: {parsed['calls']}"
-                    )
-                    
-                except Exception as e:
-                    logger.warning(f"Exception in OpenAI adapter: {e}")
+                if not openai_result["success"]:
+                    logger.warning(f"OpenAI adapter failed: {openai_result['error']}")
                     logger.warning(
                         f"rollout response: {response} can not be parsed into "
-                        f"tool calls {e}"
+                        f"tool calls {openai_result['error']}"
                     )
                     res.status = Status.ABORTED
                     return self._build_final_result(
                         res, total_reward, info, messages, loss_masks,
                         prompt_token_ids, response_token_ids
                     )
-
-                # Add assistant response to conversation
-                messages.append({"role": "assistant", "content": response})
-                assistant_token_ids, assistant_loss_mask = self._get_token_delta(
-                    state.tokenizer, messages
-                )
-                response_token_ids.extend(assistant_token_ids)
-                loss_masks.extend(assistant_loss_mask)
-
-                # Execute action in environment
-                agent_content, calls = parsed['normal_text'], parsed["calls"]
+                
+                # Extract parsed results
+                parsed = openai_result["parsed_result"]
                 logger.debug(
-                    f"Creating action from - content: '{agent_content}', "
-                    f"calls: {calls}"
-                )
-                action = call_to_action_sglang(calls, agent_content)
-                logger.debug(f"Created action: {action}")
-                
-                try:
-                    env_response = await self._execute_tool(env, action)
-                except Exception as e:
-                    logger.warning(
-                        "Environment step failed, this is usually related to "
-                        "the User simulation call."
-                    )
-                    logger.warning(f"Error: {e}")
-                    res.status = Status.ABORTED
-                    return self._build_final_result(
-                        res, total_reward, info, messages, loss_masks,
-                        prompt_token_ids, response_token_ids
-                    )
-                
-                logger.debug(
-                    f"Environment response: reward={env_response.reward}, "
-                    f"done={env_response.done}"
+                    f"Successfully parsed - normal_text: '{parsed['normal_text']}', "
+                    f"calls: {parsed['calls']}"
                 )
                 
-                # Update message history based on action type
-                if action.name != RESPOND_ACTION_NAME:
-                    messages.append({
-                        "role": "tool",
-                        "name": action.name,
-                        "content": env_response.observation,
-                    })
-                else:
-                    # Direct response from user
-                    messages.append({
-                        "role": "user", 
-                        "content": env_response.observation
-                    })
-
-                # Update token tracking
-                env_token_ids, env_loss_mask = self._get_token_delta(
-                    state.tokenizer, messages
+            except Exception as e:
+                logger.warning(f"Exception in OpenAI adapter: {e}")
+                logger.warning(
+                    f"rollout response: {response} can not be parsed into "
+                    f"tool calls {e}"
                 )
-                response_token_ids.extend(env_token_ids)
-                loss_masks.extend(env_loss_mask)
+                res.status = Status.ABORTED
+                return self._build_final_result(
+                    res, total_reward, info, messages, loss_masks,
+                    prompt_token_ids, response_token_ids
+                )
 
-                # Update reward and info
-                total_reward = env_response.reward
-                info = {**info, **env_response.info.model_dump()}
+            # Add assistant response to conversation
+            messages.append({"role": "assistant", "content": response})
+            assistant_token_ids, assistant_loss_mask = self._get_token_delta(
+                state.tokenizer, messages
+            )
+            response_token_ids.extend(assistant_token_ids)
+            loss_masks.extend(assistant_loss_mask)
 
-                # Check if done
-                if env_response.done:
-                    res.status = Status.COMPLETED
-                    break
+            # Execute action in environment
+            agent_content, calls = parsed['normal_text'], parsed["calls"]
+            logger.debug(
+                f"Creating action from - content: '{agent_content}', "
+                f"calls: {calls}"
+            )
+            action = call_to_action_sglang(calls, agent_content)
+            logger.debug(f"Created action: {action}")
+            
+            try:
+                env_response = await self._execute_tool(env, action)
+            except Exception as e:
+                logger.warning(
+                    "Environment step failed, this is usually related to "
+                    "the User simulation call."
+                )
+                logger.warning(f"Error: {e}")
+                res.status = Status.ABORTED
+                return self._build_final_result(
+                    res, total_reward, info, messages, loss_masks,
+                    prompt_token_ids, response_token_ids
+                )
+            
+            logger.debug(
+                f"Environment response: reward={env_response.reward}, "
+                f"done={env_response.done}"
+            )
+            
+            # Update message history based on action type
+            if action.name != RESPOND_ACTION_NAME:
+                messages.append({
+                    "role": "tool",
+                    "name": action.name,
+                    "content": env_response.observation,
+                })
+            else:
+                # Direct response from user
+                messages.append({
+                    "role": "user", 
+                    "content": env_response.observation
+                })
+
+            # Update token tracking
+            env_token_ids, env_loss_mask = self._get_token_delta(
+                state.tokenizer, messages
+            )
+            response_token_ids.extend(env_token_ids)
+            loss_masks.extend(env_loss_mask)
+
+            # Update reward and info
+            total_reward = env_response.reward
+            info = {**info, **env_response.info.model_dump()}
+
+            # Check if done
+            if env_response.done:
+                res.status = Status.COMPLETED
+                break
         
         # Handle truncation
         if not env_response.done:

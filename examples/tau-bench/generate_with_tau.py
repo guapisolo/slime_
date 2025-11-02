@@ -10,8 +10,6 @@ import os
 import logging
 from typing import Any, Dict
 
-import weave
-
 from tau_bench.envs import get_env
 from tau_bench.types import RunConfig
 
@@ -39,7 +37,6 @@ os.environ["GEMINI_API_KEY"] = GEMINI_API_KEY
 tau_config = RunConfig(**TAU_CONFIGS)
 
 
-@weave.op()
 def res_to_sample(res: InteractionResult, task_index: int) -> Sample:
     """
     Convert InteractionResult to Sample format for slime training.
@@ -103,7 +100,6 @@ def res_to_sample(res: InteractionResult, task_index: int) -> Sample:
     return sample
 
 
-@weave.op(tracing_sample_rate=0.1)
 async def generate(args: Dict[str, Any], sample: Sample, sampling_params: dict) -> Sample:
     """
     Generate a complete agent-environment interaction trajectory for tau-bench.
