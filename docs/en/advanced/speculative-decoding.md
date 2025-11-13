@@ -6,7 +6,7 @@ Speculative decoding is a key optimization for speeding up rollouts. Instead of 
 
 For models with MTP layers (e.g., GLM-4.6, DeepSeek-V3/R1), simply add:
 
-```shell
+```bash
 --sglang-speculative-algorithm EAGLE
 --sglang-speculative-num-steps 3
 --sglang-speculative-eagle-topk 1
@@ -15,7 +15,7 @@ For models with MTP layers (e.g., GLM-4.6, DeepSeek-V3/R1), simply add:
 
 If you want to use a separately trained draft model (e.g., one trained with [SpecForge](https://docs.sglang.ai/SpecForge/)), also set:
 
-```shell
+```bash
 --sglang-speculative-draft-model-path /your/draft/model/path
 ```
 
@@ -27,7 +27,7 @@ As RL progresses, the sampling distributions of the draft and target models can 
 
 Slime currently supports online training of the MTP layers during RL, updating the draft model in sync with training to consistently improve sampling speed. See the related rationale in this [blog](https://www.notion.so/jiajunli-guapisolo/Power-Up-Speculative-Decoding-In-Reinforcement-Learning-2a92d24a293b802d9c73dbae429e581e). Use it as follows:
 
-```shell
+```bash
 --enable-mtp-training
 --mtp-loss-scaling-factor 0.2
 ```
