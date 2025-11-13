@@ -6,7 +6,7 @@
 
 对于有 MTP 层的模型（例如 GLM-4.6、Deepseek-V3/R1），只需要添加：
 
-```shell
+```bash
 --sglang-speculative-algorithm EAGLE
 --sglang-speculative-num-steps 3
 --sglang-speculative-eagle-topk 1
@@ -15,7 +15,7 @@
 
 如果要使用单独训练的 draft model（例如 [SpecForge](https://docs.sglang.ai/SpecForge/) 训练的），还需要额外设置：
 
-```shell
+```bash
 --sglang-speculative-draft-model-path /your/draft/model/path
 ```
 
@@ -27,7 +27,7 @@
 
 目前，slime 支持了在 RL 流程中在线训练 MTP 层，随着训练的进行同步更新 draft model，稳定提高了采样速度，相关原理可参见 [blog](https://www.notion.so/jiajunli-guapisolo/Power-Up-Speculative-Decoding-In-Reinforcement-Learning-2a92d24a293b802d9c73dbae429e581e)。使用方法如下：
 
-```shell
+```bash
 --enable-mtp-training
 --mtp-loss-scaling-factor 0.2
 ```
