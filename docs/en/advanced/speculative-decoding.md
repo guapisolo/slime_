@@ -1,8 +1,8 @@
-# Speculative Sampling
+# Speculative Decoding
 
-Speculative sampling is a key optimization for speeding up rollouts. Instead of having the expensive target model decode token by token during inference, a lightweight draft model first decodes ahead to produce several tokens, and then the target model verifies them in a batch.
+Speculative decoding is a key optimization for speeding up rollouts. Instead of having the expensive target model decode token by token during inference, a lightweight draft model first decodes ahead to produce several tokens, and then the target model verifies them in a batch.
 
-## Accelerating Inference with Speculative Sampling
+## Accelerating Inference with Speculative Decoding
 
 For models with MTP layers (e.g., GLM-4.6, DeepSeek-V3/R1), simply add:
 
