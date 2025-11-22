@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 _WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
 _LOCAL_REPO = Path("/root/arena/arena-hard-auto")
-_LOCAL_REQUIREMENTS = _WORKSPACE_ROOT / "examples" / "eval_multi_task" / "requirements_arena.txt"
+_LOCAL_REQUIREMENTS = _WORKSPACE_ROOT / "examples" / "eval_multi_task" / "tasks" / "arena_hard" / "requirements.txt"
 
 _DEFAULT_BENCH_NAME = "arena-hard-v2.0"
 _CONFIG_PATH = _LOCAL_REPO / "config" / "arena-hard-v2.0.yaml"

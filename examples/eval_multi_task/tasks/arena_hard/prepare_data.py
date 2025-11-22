@@ -8,8 +8,8 @@ plus any metadata).
 Usage example:
 
 ```bash
-python examples/eval_multi_task/prepare_arena_hard.py \
-    --output-file examples/eval_multi_task/data/arena-hard-v2.0_eval.jsonl
+python examples/eval_multi_task/tasks/arena_hard/prepare_data.py \
+    --output-file /root/arena/arena-hard-v2.0_eval.jsonl
 ```
 
 The script is idempotent and will skip cloning if the repo directory already exists.
