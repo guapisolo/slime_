@@ -9,7 +9,8 @@ from typing import Optional
 from slime.utils.types import Sample
 
 _DEFAULT_LOG_DIR = Path("/root/arena/logs")
-_LOGGER_CACHE: dict[tuple[bool, int, str], "EvalSampleLogger"] = {}
+_ACTIVE_LOGGER: Optional["EvalSampleLogger"] = None
+_ACTIVE_SETTINGS: Optional[tuple[bool, int, str]] = None
 
 
 class EvalSampleLogger:
@@ -23,9 +24,8 @@ class EvalSampleLogger:
         self._log_path: Optional[Path] = None
         self._run_dir: Optional[Path] = None
         if self.enabled:
-            base_dir = log_dir
             timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-            self._run_dir = base_dir / f"arena-hard-eval-{timestamp}"
+            self._run_dir = log_dir / f"arena-hard-eval-{timestamp}"
 
     def submit(self, sample: Sample, reward: float) -> None:
         if not self.enabled:
@@ -76,54 +76,32 @@ class EvalSampleLogger:
             self._count += 1
 
 
-def _coerce_bool(value: Optional[object]) -> bool:
-    if isinstance(value, str):
-        return value.lower() in {"1", "true", "yes", "on"}
-    return bool(value)
-
-
-def _normalize_settings(
-    *,
-    enabled: Optional[object],
-    limit: Optional[object],
-    log_dir: Optional[str | Path],
-) -> tuple[bool, int, Path]:
-    enabled_val = _coerce_bool(enabled) if enabled is not None else False
-    limit_val = int(limit) if limit is not None else 10
-    log_dir_val = Path(log_dir) if log_dir is not None else _DEFAULT_LOG_DIR
-    return enabled_val, limit_val, log_dir_val
-
-
-def get_eval_sample_logger(
+def _resolve_settings(
     args=None,
     *,
-    enabled: Optional[bool] = None,
-    limit: Optional[int] = None,
-    log_dir: Optional[str | Path] = None,
-) -> EvalSampleLogger:
+    enabled: Optional[object] = None,
+    limit: Optional[object] = None,
+    log_dir: Optional[object] = None,
+) -> tuple[bool, int, Path]:
+    assert args is not None, "args is required"
     if args is not None:
-        enabled = getattr(args, "arena_eval_log_samples", enabled)
-        limit = getattr(args, "arena_eval_log_limit", limit)
-        log_dir = getattr(args, "arena_eval_log_dir", log_dir)
+        enabled = getattr(args, "arena_eval_log_samples", False)
+        limit = getattr(args, "arena_eval_log_limit", 10)
+        log_dir = getattr(args, "arena_eval_log_dir", _DEFAULT_LOG_DIR)
 
-    normalize_enabled, normalize_limit, normalize_dir = _normalize_settings(
-        enabled=enabled,
-        limit=limit,
-        log_dir=log_dir,
-    )
+    return enabled, limit, log_dir
 
-    cache_key = (normalize_enabled, normalize_limit, str(normalize_dir))
-    logger = _LOGGER_CACHE.get(cache_key)
-    if logger is None:
-        if normalize_enabled:
-            normalize_dir.mkdir(parents=True, exist_ok=True)
-        logger = EvalSampleLogger(
-            enabled=normalize_enabled,
-            limit=normalize_limit,
-            log_dir=normalize_dir,
-        )
-        _LOGGER_CACHE[cache_key] = logger
-    return logger
+
+def get_eval_sample_logger(args=None, **overrides) -> EvalSampleLogger:
+    global _ACTIVE_LOGGER, _ACTIVE_SETTINGS
+    enabled, limit, log_dir = _resolve_settings(args, **overrides)
+    settings_key = (enabled, limit, str(log_dir))
+    if _ACTIVE_LOGGER is None or _ACTIVE_SETTINGS != settings_key:
+        if enabled:
+            log_dir.mkdir(parents=True, exist_ok=True)
+        _ACTIVE_LOGGER = EvalSampleLogger(enabled=enabled, limit=limit, log_dir=log_dir)
+        _ACTIVE_SETTINGS = settings_key
+    return _ACTIVE_LOGGER
 
 
 __all__ = ["EvalSampleLogger", "get_eval_sample_logger"]
