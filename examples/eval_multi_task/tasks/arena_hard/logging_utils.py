@@ -8,9 +8,8 @@ from typing import Optional
 
 from slime.utils.types import Sample
 
-_DEFAULT_LOG_DIR = Path("/root/arena/logs")
+_DEFAULT_LOG_DIR = "/root/arena/logs"
 _ACTIVE_LOGGER: Optional["EvalSampleLogger"] = None
-_ACTIVE_SETTINGS: Optional[tuple[bool, int, str]] = None
 
 
 class EvalSampleLogger:
@@ -38,9 +37,7 @@ class EvalSampleLogger:
             loop.create_task(asyncio.to_thread(self._log_sync, sample, reward))
 
     def _log_sync(self, sample: Sample, reward: float) -> None:
-        if not self.enabled or self._count >= self.limit:
-            return
-        if sample is None:
+        if not self.enabled or sample is None:
             return
 
         with self._lock:
@@ -76,31 +73,14 @@ class EvalSampleLogger:
             self._count += 1
 
 
-def _resolve_settings(
-    args=None,
-    *,
-    enabled: Optional[object] = None,
-    limit: Optional[object] = None,
-    log_dir: Optional[object] = None,
-) -> tuple[bool, int, Path]:
-    assert args is not None, "args is required"
-    if args is not None:
-        enabled = getattr(args, "arena_eval_log_samples", False)
-        limit = getattr(args, "arena_eval_log_limit", 10)
-        log_dir = getattr(args, "arena_eval_log_dir", _DEFAULT_LOG_DIR)
-
-    return enabled, limit, log_dir
-
-
 def get_eval_sample_logger(args=None, **overrides) -> EvalSampleLogger:
-    global _ACTIVE_LOGGER, _ACTIVE_SETTINGS
-    enabled, limit, log_dir = _resolve_settings(args, **overrides)
-    settings_key = (enabled, limit, str(log_dir))
-    if _ACTIVE_LOGGER is None or _ACTIVE_SETTINGS != settings_key:
-        if enabled:
-            log_dir.mkdir(parents=True, exist_ok=True)
-        _ACTIVE_LOGGER = EvalSampleLogger(enabled=enabled, limit=limit, log_dir=log_dir)
-        _ACTIVE_SETTINGS = settings_key
+    global _ACTIVE_LOGGER
+    if _ACTIVE_LOGGER is None:
+        _ACTIVE_LOGGER = EvalSampleLogger(
+            enabled=getattr(args, "arena_eval_log_samples", False),
+            limit=getattr(args, "arena_eval_log_limit", 10),
+            log_dir=Path(getattr(args, "arena_eval_log_dir", _DEFAULT_LOG_DIR)),
+        )
     return _ACTIVE_LOGGER
 
 
