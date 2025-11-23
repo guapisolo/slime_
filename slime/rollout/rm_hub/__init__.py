@@ -61,7 +61,7 @@ async def async_rm(args, sample: Sample, **kwargs):
     elif rm_type == "arena-hard":
         from .arena_hard import compute_arena_reward
 
-        return await compute_arena_reward(sample)
+        return await compute_arena_reward(args, sample)
     elif rm_type:
         raise NotImplementedError(f"Rule-based RM for {rm_type} is not implemented.")
     else:

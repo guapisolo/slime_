@@ -64,6 +64,7 @@ def convert_questions(question_path: Path, bench_name: str) -> list[Dict[str, An
             outputs.append(
                 {
                     "prompt": raw["prompt"],
+                    "label": "",
                     "metadata": metadata,
                 }
             )
