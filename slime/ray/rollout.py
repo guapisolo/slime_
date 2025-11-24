@@ -185,12 +185,7 @@ class RolloutManager:
         if (path_template := self.args.save_readable_rollout_data) is not None:
             import json
 
-            num_samples = (
-                self.args.save_readable_rollout_data_limit
-                if self.args.save_readable_rollout_data_limit is not None
-                else len(data)
-            )
-
+            num_samples = self.args.save_readable_rollout_data_limit
             if evaluation:
                 for dataset_name, info in data.items():
                     path = Path(path_template.format(rollout_id=("eval_" + dataset_name + "_") + str(rollout_id)))
@@ -202,8 +197,9 @@ class RolloutManager:
             def save_data(path, data):
                 logger.info(f"Save readable rollout data to {path}")
                 path.parent.mkdir(parents=True, exist_ok=True)
+                output_data = data[:num_samples] if num_samples is not None else data
                 with open(path, "w") as f:
-                    for sample in data[:num_samples]:
+                    for sample in output_data:
                         f.write(json.dumps(sample.to_dict()) + "\n")
 
     def _post_process_rewards(self, samples: Union[list[Sample], list[list[Sample]]]):
