@@ -186,6 +186,19 @@ class RolloutManager:
             import json
 
             num_samples = self.args.save_readable_rollout_data_limit
+
+            def save_data(path, samples):
+                logger.info(f"Save readable rollout data to {path}")
+                path.parent.mkdir(parents=True, exist_ok=True)
+                output_data = samples[:num_samples] if num_samples is not None else samples
+                excluded_fields = {"tokens", "rollout_log_probs", "loss_mask", "rollout_routed_experts"}
+                with open(path, "w") as f:
+                    for sample in output_data:
+                        sample_dict = sample.to_dict()
+                        for field in excluded_fields:
+                            sample_dict.pop(field, None)
+                        f.write(json.dumps(sample_dict) + "\n")
+
             if evaluation:
                 for dataset_name, info in data.items():
                     path = Path(path_template.format(rollout_id=("eval_" + dataset_name + "_") + str(rollout_id)))
@@ -193,14 +206,6 @@ class RolloutManager:
             else:
                 path = Path(path_template.format(rollout_id=str(rollout_id)))
                 save_data(path, data)
-
-            def save_data(path, data):
-                logger.info(f"Save readable rollout data to {path}")
-                path.parent.mkdir(parents=True, exist_ok=True)
-                output_data = data[:num_samples] if num_samples is not None else data
-                with open(path, "w") as f:
-                    for sample in output_data:
-                        f.write(json.dumps(sample.to_dict()) + "\n")
 
     def _post_process_rewards(self, samples: Union[list[Sample], list[list[Sample]]]):
         if self.custom_reward_post_process_func is not None:
