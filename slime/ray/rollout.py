@@ -185,12 +185,14 @@ class RolloutManager:
         if (path_template := self.args.save_readable_rollout_data) is not None:
             import json
 
-            num_samples = self.args.save_readable_rollout_data_limit
-
             def save_data(path, samples):
                 logger.info(f"Save readable rollout data to {path}")
                 path.parent.mkdir(parents=True, exist_ok=True)
-                output_data = samples[:num_samples] if num_samples is not None else samples
+                if self.args.save_readable_rollout_data_limit is not None:
+                    num_samples = min(self.args.save_readable_rollout_data_limit, len(samples))
+                    output_data = samples[:num_samples]
+                else:
+                    output_data = samples
                 excluded_fields = {"tokens", "rollout_log_probs", "loss_mask", "rollout_routed_experts"}
                 with open(path, "w") as f:
                     for sample in output_data:
