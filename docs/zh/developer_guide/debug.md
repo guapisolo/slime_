@@ -50,4 +50,4 @@ slime 支持将训练部分和推理部分分开进行调试，从而实现：
 
 4. `--save-readable-rollout-data /your/saved/debug/data_{rollout_id}.json`
 
-   配合 `--save-readable-rollout-data-limit` 使用时，会把每个 rollout 的前若干条样本以 JSON Lines 形式落盘，便于快速查看 prompt、response 和 metadata，而无需加载 PyTorch tensor。
+   配合 `--save-readable-rollout-data-limit` 使用时，会把每个 rollout 的前若干条样本以 JSON Lines 形式落盘，便于快速查看 prompt、response 和 metadata，而无需加载 PyTorch tensor；如果不设置该 limit，会默认保存所有样本。

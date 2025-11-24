@@ -52,4 +52,4 @@ Specifically, slime currently provides the following parameters for separate deb
 
 5.  `--save-readable-rollout-data /your/saved/debug/data_{rollout_id}.json`
 
-    When enabled, the first `--save-readable-rollout-data-limit` samples of each rollout are dumped as JSON Lines so you can quickly inspect the prompts, responses, and metadata without loading PyTorch tensors.
+    When enabled, the first `--save-readable-rollout-data-limit` samples of each rollout are dumped as JSON Lines so you can quickly inspect the prompts, responses, and metadata without loading PyTorch tensors; if the limit is not set, the complete rollout is logged.
