@@ -1,12 +1,93 @@
 from __future__ import annotations
 
-import copy
 from collections.abc import Iterable, Sequence
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 _EMPTY_VALUES = (None, [], {})
+
+_DATASET_RUNTIME_SPECS: dict[str, dict[str, tuple[str, ...]]] = {
+    "n_samples_per_eval_prompt": {
+        "dataset_keys": ("n_samples_per_eval_prompt",),
+        "default_keys": ("n_samples_per_eval_prompt",),
+        "arg_attrs": ("n_samples_per_eval_prompt", "n_samples_per_prompt"),
+    },
+    "temperature": {
+        "dataset_keys": ("temperature",),
+        "default_keys": ("temperature",),
+        "arg_attrs": ("eval_temperature", "rollout_temperature"),
+    },
+    "top_p": {
+        "dataset_keys": ("top_p",),
+        "default_keys": ("top_p",),
+        "arg_attrs": ("eval_top_p", "rollout_top_p"),
+    },
+    "top_k": {
+        "dataset_keys": ("top_k",),
+        "default_keys": ("top_k",),
+        "arg_attrs": ("eval_top_k", "rollout_top_k"),
+    },
+    "max_response_len": {
+        "dataset_keys": ("max_response_len",),
+        "default_keys": ("max_response_len",),
+        "arg_attrs": ("eval_max_response_len", "rollout_max_response_len"),
+    },
+    "min_new_tokens": {
+        "dataset_keys": ("min_new_tokens",),
+        "default_keys": ("min_new_tokens",),
+        "arg_attrs": ("eval_min_new_tokens",),
+    },
+}
+
+_DATASET_SAMPLE_FIELD_SPECS: dict[str, dict[str, tuple[str, ...]]] = {
+    "prompt_key": {
+        "dataset_keys": ("prompt_key",),
+        "default_keys": ("prompt_key",),
+        "arg_attrs": ("eval_input_key", "input_key"),
+    },
+    "label_key": {
+        "dataset_keys": ("label_key",),
+        "default_keys": ("label_key",),
+        "arg_attrs": ("eval_label_key", "label_key"),
+    },
+    "tool_key": {
+        "dataset_keys": ("tool_key",),
+        "default_keys": ("tool_key",),
+        "arg_attrs": ("eval_tool_key", "tool_key"),
+    },
+    "metadata_key": {
+        "dataset_keys": ("metadata_key",),
+        "default_keys": ("metadata_key",),
+        "arg_attrs": ("metadata_key",),
+    },
+    "stop": {
+        "dataset_keys": ("stop",),
+        "default_keys": ("stop",),
+        "arg_attrs": ("rollout_stop",),
+    },
+    "stop_token_ids": {
+        "dataset_keys": ("stop_token_ids",),
+        "default_keys": ("stop_token_ids",),
+        "arg_attrs": ("rollout_stop_token_ids",),
+    },
+}
+
+
+def _first_not_none(*values: Any) -> Any:
+    for value in values:
+        if value is not None:
+            return value
+    return None
+
+
+def _pick_from_mapping(data: dict[str, Any] | None, keys: tuple[str, ...]) -> Any:
+    if not data:
+        return None
+    for key in keys:
+        if key in data and data[key] is not None:
+            return data[key]
+    return None
 
 
 def _ensure_metadata_overrides(value: Any) -> dict[str, Any]:
@@ -48,17 +129,6 @@ class EvalDatasetConfig(BaseModel):
     @field_validator("metadata_overrides", mode="before")
     def _validate_metadata_overrides(cls, value: Any) -> dict[str, Any]:
         return _ensure_metadata_overrides(value)
-
-    def apply_defaults(self, defaults: dict[str, Any]) -> None:
-        for key, value in defaults.items():
-            if not hasattr(self, key):
-                continue
-            current = getattr(self, key)
-            if current in _EMPTY_VALUES:
-                if isinstance(value, (dict, list)):
-                    setattr(self, key, copy.deepcopy(value))
-                else:
-                    setattr(self, key, value)
 
     @property
     def cache_key(self) -> tuple[Any, ...]:
@@ -116,12 +186,27 @@ def ensure_dataset_list(config: Any) -> list[dict[str, Any]]:
     raise TypeError("eval.datasets must be either a list or a mapping.")
 
 
+def _apply_dataset_field_overrides(args: Any, dataset_cfg: dict[str, Any], defaults: dict[str, Any]) -> None:
+    combined_specs = {**_DATASET_RUNTIME_SPECS, **_DATASET_SAMPLE_FIELD_SPECS}
+    for field_name, spec in combined_specs.items():
+        dataset_value = _pick_from_mapping(dataset_cfg, spec["dataset_keys"])
+        default_value = _pick_from_mapping(defaults, spec["default_keys"])
+        arg_values = [getattr(args, attr, None) for attr in spec["arg_attrs"]]
+        resolved_value = _first_not_none(dataset_value, default_value, *arg_values)
+        if resolved_value is not None:
+            dataset_cfg[field_name] = resolved_value
+
+
 def build_eval_dataset_configs(
-    raw_config: Iterable[dict[str, Any]], defaults: dict[str, Any]
+    args: Any,
+    raw_config: Iterable[dict[str, Any]],
+    defaults: dict[str, Any],
 ) -> list[EvalDatasetConfig]:
+    defaults = defaults or {}
     datasets: list[EvalDatasetConfig] = []
     for cfg in raw_config:
-        dataset = EvalDatasetConfig(**cfg)
-        dataset.apply_defaults(defaults)
+        cfg_dict = dict(cfg or {})
+        _apply_dataset_field_overrides(args, cfg_dict, defaults)
+        dataset = EvalDatasetConfig(**cfg_dict)
         datasets.append(dataset)
     return datasets
