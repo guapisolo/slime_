@@ -33,6 +33,11 @@ DATASET_RUNTIME_SPECS: dict[str, dict[str, tuple[str, ...]]] = {
         "default_keys": ("max_response_len",),
         "arg_attrs": ("eval_max_response_len", "rollout_max_response_len"),
     },
+    "custom_generate_function_path": {
+        "dataset_keys": ("custom_generate_function_path",),
+        "default_keys": ("custom_generate_function_path",),
+        "arg_attrs": ("custom_generate_function_path",),
+    },
 }
 
 DATASET_SAMPLE_SPECS: dict[str, dict[str, tuple[str, ...]]] = {
@@ -98,6 +103,7 @@ class EvalDatasetConfig:
     name: str
     path: str
     rm_type: str | None = None
+    custom_generate_function_path: str | None = None
 
     # Dataset-specific overrides
     input_key: str | None = None

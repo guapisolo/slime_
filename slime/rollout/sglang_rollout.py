@@ -234,8 +234,12 @@ async def generate_and_rm(
             sample.status = Sample.Status.ABORTED
             return sample
 
-        if args.custom_generate_function_path is not None:
-            custom_generate_func = load_function(args.custom_generate_function_path)
+        # sample param level > args level
+        override_generate_path = (
+            sampling_params.get("custom_generate_function_path", None) or args.custom_generate_function_path
+        )
+        if override_generate_path is not None:
+            custom_generate_func = load_function(override_generate_path)
             sample = await custom_generate_func(args, sample, sampling_params)
         else:
             sample = await generate(args, sample, sampling_params)
@@ -504,6 +508,7 @@ async def eval_rollout_single_dataset(
         skip_special_tokens=args.rollout_skip_special_tokens,
         no_stop_trim=True,
         spaces_between_special_tokens=False,
+        custom_generate_function_path=dataset_cfg.custom_generate_function_path,
     )
 
     tasks = []
