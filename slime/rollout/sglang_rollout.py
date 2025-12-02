@@ -484,7 +484,7 @@ async def eval_rollout_single_dataset(
             path=dataset_cfg.path,
             tokenizer=tokenizer,
             max_length=args.eval_max_prompt_len,
-            prompt_key=dataset_cfg.prompt_key,
+            prompt_key=dataset_cfg.input_key,
             label_key=dataset_cfg.label_key,
             multimodal_keys=args.multimodal_keys,
             metadata_key=dataset_cfg.metadata_key,

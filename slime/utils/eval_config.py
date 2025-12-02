@@ -42,9 +42,9 @@ DATASET_RUNTIME_SPECS: dict[str, dict[str, tuple[str, ...]]] = {
 }
 
 DATASET_SAMPLE_SPECS: dict[str, dict[str, tuple[str, ...]]] = {
-    "prompt_key": {
-        "dataset_keys": ("prompt_key",),
-        "default_keys": ("prompt_key",),
+    "input_key": {
+        "dataset_keys": ("input_key",),
+        "default_keys": ("input_key",),
         "arg_attrs": ("eval_input_key", "input_key"),
     },
     "label_key": {
@@ -107,7 +107,7 @@ class EvalDatasetConfig(BaseModel):
     rm_type: str | None = None
 
     # Dataset-specific overrides
-    prompt_key: str | None = None
+    input_key: str | None = None
     label_key: str | None = None
     tool_key: str | None = None
     metadata_key: str | None = None
@@ -137,7 +137,7 @@ class EvalDatasetConfig(BaseModel):
         return (
             self.name,
             self.path,
-            self.prompt_key,
+            self.input_key,
             self.label_key,
             self.tool_key,
             self.metadata_key,
