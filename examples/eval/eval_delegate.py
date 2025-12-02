@@ -27,8 +27,7 @@ class EvalEnvDatasetConfig:
     def parse(cls, args, dataset_cfg: Mapping[str, Any], defaults: Mapping[str, Any]) -> "EvalEnvDatasetConfig":
         """Merge dataset overrides with defaults/CLI settings and coerce types via OmegaConf."""
         defaults = defaults or {}
-        cfg_dict = dict(dataset_cfg or {})
-        name = str(cfg_dict.get("name", "")).strip()
+        name = str(dataset_cfg.name).strip()
         if not name:
             raise ValueError("Each delegate dataset entry must include a non-empty `name`.")
         if ":" in name:
@@ -36,10 +35,9 @@ class EvalEnvDatasetConfig:
                 "Colon in dataset name is not allowed; use `n_samples_per_eval_prompt` to configure samples per prompt."
             )
 
-        cfg_dict["name"] = name
-        _apply_dataset_field_overrides(args, cfg_dict, defaults, cls.FIELD_SPECS)
+        _apply_dataset_field_overrides(args, dataset_cfg, defaults, cls.FIELD_SPECS)
 
-        cfg = OmegaConf.merge(OmegaConf.structured(cls), OmegaConf.create(cfg_dict))
+        cfg = OmegaConf.merge(OmegaConf.structured(cls), OmegaConf.create(dataset_cfg))
         obj = OmegaConf.to_object(cfg)
         if not isinstance(obj, cls):
             obj = cls(**obj)
