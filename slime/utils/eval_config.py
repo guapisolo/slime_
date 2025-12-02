@@ -40,6 +40,8 @@ _DATASET_RUNTIME_SPECS: dict[str, dict[str, tuple[str, ...]]] = {
     },
 }
 
+DATASET_RUNTIME_FIELD_SPECS: dict[str, dict[str, tuple[str, ...]]] = dict(_DATASET_RUNTIME_SPECS)
+
 _DATASET_SAMPLE_FIELD_SPECS: dict[str, dict[str, tuple[str, ...]]] = {
     "prompt_key": {
         "dataset_keys": ("prompt_key",),
@@ -186,9 +188,10 @@ def ensure_dataset_list(config: Any) -> list[dict[str, Any]]:
     raise TypeError("eval.datasets must be either a list or a mapping.")
 
 
-def _apply_dataset_field_overrides(args: Any, dataset_cfg: dict[str, Any], defaults: dict[str, Any]) -> None:
-    combined_specs = {**_DATASET_RUNTIME_SPECS, **_DATASET_SAMPLE_FIELD_SPECS}
-    for field_name, spec in combined_specs.items():
+def _apply_dataset_field_overrides(
+    args: Any, dataset_cfg: dict[str, Any], defaults: dict[str, Any], spec_names: dict[str, Any]
+) -> None:
+    for field_name, spec in spec_names.items():
         dataset_value = _pick_from_mapping(dataset_cfg, spec["dataset_keys"])
         default_value = _pick_from_mapping(defaults, spec["default_keys"])
         arg_values = [getattr(args, attr, None) for attr in spec["arg_attrs"]]
@@ -206,7 +209,8 @@ def build_eval_dataset_configs(
     datasets: list[EvalDatasetConfig] = []
     for cfg in raw_config:
         cfg_dict = dict(cfg or {})
-        _apply_dataset_field_overrides(args, cfg_dict, defaults)
+        combined_specs = {**_DATASET_RUNTIME_SPECS, **_DATASET_SAMPLE_FIELD_SPECS}
+        _apply_dataset_field_overrides(args, cfg_dict, defaults, combined_specs)
         dataset = EvalDatasetConfig(**cfg_dict)
         datasets.append(dataset)
     return datasets
