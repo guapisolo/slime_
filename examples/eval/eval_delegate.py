@@ -4,7 +4,7 @@ from dataclasses import dataclass, field, fields
 from typing import Any, Optional
 
 from omegaconf import OmegaConf
-from slime.utils.eval_config import DATASET_RUNTIME_FIELD_SPECS, _apply_dataset_field_overrides
+from slime.utils.eval_config import DATASET_RUNTIME_SPECS, _apply_dataset_field_overrides
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ class EvalEnvDatasetConfig:
     max_response_len: int | None = None
 
     FIELD_NAMES = ("n_samples_per_eval_prompt", "temperature", "top_p", "top_k", "max_response_len")
-    FIELD_SPECS = {field: DATASET_RUNTIME_FIELD_SPECS[field] for field in FIELD_NAMES}
+    FIELD_SPECS = {field: DATASET_RUNTIME_SPECS[field] for field in FIELD_NAMES}
 
     @classmethod
     def parse(cls, args, dataset_cfg: Mapping[str, Any], defaults: Mapping[str, Any]) -> "EvalEnvDatasetConfig":

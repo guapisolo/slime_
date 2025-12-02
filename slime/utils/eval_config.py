@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 _EMPTY_VALUES = (None, [], {})
 
-_DATASET_RUNTIME_SPECS: dict[str, dict[str, tuple[str, ...]]] = {
+DATASET_RUNTIME_SPECS: dict[str, dict[str, tuple[str, ...]]] = {
     "n_samples_per_eval_prompt": {
         "dataset_keys": ("n_samples_per_eval_prompt",),
         "default_keys": ("n_samples_per_eval_prompt",),
@@ -40,9 +40,7 @@ _DATASET_RUNTIME_SPECS: dict[str, dict[str, tuple[str, ...]]] = {
     },
 }
 
-DATASET_RUNTIME_FIELD_SPECS: dict[str, dict[str, tuple[str, ...]]] = dict(_DATASET_RUNTIME_SPECS)
-
-_DATASET_SAMPLE_FIELD_SPECS: dict[str, dict[str, tuple[str, ...]]] = {
+DATASET_SAMPLE_SPECS: dict[str, dict[str, tuple[str, ...]]] = {
     "prompt_key": {
         "dataset_keys": ("prompt_key",),
         "default_keys": ("prompt_key",),
@@ -209,7 +207,7 @@ def build_eval_dataset_configs(
     datasets: list[EvalDatasetConfig] = []
     for cfg in raw_config:
         cfg_dict = dict(cfg or {})
-        combined_specs = {**_DATASET_RUNTIME_SPECS, **_DATASET_SAMPLE_FIELD_SPECS}
+        combined_specs = {**DATASET_RUNTIME_SPECS, **DATASET_SAMPLE_SPECS}
         _apply_dataset_field_overrides(args, cfg_dict, defaults, combined_specs)
         dataset = EvalDatasetConfig(**cfg_dict)
         datasets.append(dataset)
