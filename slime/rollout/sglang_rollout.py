@@ -506,9 +506,6 @@ async def eval_rollout_single_dataset(
         spaces_between_special_tokens=False,
     )
 
-    if dataset_cfg.min_new_tokens is not None:
-        base_sampling_params["min_new_tokens"] = dataset_cfg.min_new_tokens
-
     tasks = []
     # do multiple samples for eval prompts
     sample_index = 0

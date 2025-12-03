@@ -33,11 +33,6 @@ DATASET_RUNTIME_SPECS: dict[str, dict[str, tuple[str, ...]]] = {
         "default_keys": ("max_response_len",),
         "arg_attrs": ("eval_max_response_len", "rollout_max_response_len"),
     },
-    "min_new_tokens": {
-        "dataset_keys": ("min_new_tokens",),
-        "default_keys": ("min_new_tokens",),
-        "arg_attrs": ("eval_min_new_tokens",),
-    },
 }
 
 DATASET_SAMPLE_SPECS: dict[str, dict[str, tuple[str, ...]]] = {
@@ -126,7 +121,6 @@ class EvalDatasetConfig:
     top_p: float | None = None
     top_k: int | None = None
     max_response_len: int | None = None
-    min_new_tokens: int | None = None
 
     stop: Sequence[str] | None = None
     stop_token_ids: Sequence[int] | None = None
