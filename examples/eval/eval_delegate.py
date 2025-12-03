@@ -27,7 +27,7 @@ class EvalEnvDatasetConfig:
     def parse(cls, args, dataset_cfg: Mapping[str, Any], defaults: Mapping[str, Any]) -> "EvalEnvDatasetConfig":
         """Merge dataset overrides with defaults/CLI settings and coerce types via OmegaConf."""
         defaults = defaults or {}
-        name = str(dataset_cfg.name).strip()
+        name = str(dataset_cfg.get("name", "")).strip()
         if not name:
             raise ValueError("Each delegate dataset entry must include a non-empty `name`.")
         if ":" in name:
