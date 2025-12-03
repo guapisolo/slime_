@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass, field
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
-
-_EMPTY_VALUES = (None, [], {})
+_MISSING = object()
 
 # TODO: This is ugly, temporarily leave this. We should unify all the config name for dataset, default, and args. (advice from Tom.)
 DATASET_RUNTIME_SPECS: dict[str, dict[str, tuple[str, ...]]] = {
@@ -75,19 +74,27 @@ DATASET_SAMPLE_SPECS: dict[str, dict[str, tuple[str, ...]]] = {
 }
 
 
-def _first_not_none(*values: Any) -> Any:
+def _first_not_missing(*values: Any) -> Any:
     for value in values:
+        if value is not _MISSING:
+            return value
+    return _MISSING
+
+
+def _pick_from_mapping(data: dict[str, Any], key_names: tuple[str, ...] | None) -> Any:
+    if key_names is None:
+        return _MISSING
+    for key_name in key_names:
+        if key_name in data:
+            return data[key_name]
+    return _MISSING
+
+
+def pick_from_args(args: Any, attrs: tuple[str, ...]) -> Any:
+    for attr in attrs:
+        value = getattr(args, attr, None)
         if value is not None:
             return value
-    return None
-
-
-def _pick_from_mapping(data: dict[str, Any] | None, keys: tuple[str, ...]) -> Any:
-    if not data:
-        return None
-    for key in keys:
-        if key in data and data[key] is not None:
-            return data[key]
     return None
 
 
@@ -99,7 +106,8 @@ def _ensure_metadata_overrides(value: Any) -> dict[str, Any]:
     return value
 
 
-class EvalDatasetConfig(BaseModel):
+@dataclass
+class EvalDatasetConfig:
     """Configuration for a single evaluation dataset."""
 
     name: str
@@ -123,13 +131,10 @@ class EvalDatasetConfig(BaseModel):
     stop: Sequence[str] | None = None
     stop_token_ids: Sequence[int] | None = None
 
-    metadata_overrides: dict[str, Any] = Field(default_factory=dict)
+    metadata_overrides: dict[str, Any] = field(default_factory=dict)
 
-    model_config = ConfigDict(validate_assignment=True, extra="forbid")
-
-    @field_validator("metadata_overrides", mode="before")
-    def _validate_metadata_overrides(cls, value: Any) -> dict[str, Any]:
-        return _ensure_metadata_overrides(value)
+    def __post_init__(self) -> None:
+        self.metadata_overrides = _ensure_metadata_overrides(self.metadata_overrides)
 
     @property
     def cache_key(self) -> tuple[Any, ...]:
@@ -193,10 +198,11 @@ def _apply_dataset_field_overrides(
     for field_name, spec in spec_names.items():
         dataset_value = _pick_from_mapping(dataset_cfg, spec["dataset_keys"])
         default_value = _pick_from_mapping(defaults, spec["default_keys"])
-        arg_values = [getattr(args, attr, None) for attr in spec["arg_attrs"]]
-        resolved_value = _first_not_none(dataset_value, default_value, *arg_values)
-        if resolved_value is not None:
+        resolved_value = _first_not_missing(dataset_value, default_value)
+        if resolved_value is not _MISSING:
             dataset_cfg[field_name] = resolved_value
+            continue
+        dataset_cfg[field_name] = pick_from_args(args, spec["arg_attrs"])
 
 
 def build_eval_dataset_configs(
