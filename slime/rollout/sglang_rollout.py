@@ -481,7 +481,7 @@ async def eval_rollout_single_dataset(
 
     global EVAL_PROMPT_DATASET
 
-    cache_key = dataset_cfg.cache_key + (args.hf_checkpoint, args.apply_chat_template)
+    cache_key = dataset_cfg.cache_key + (args.hf_checkpoint, dataset_cfg.apply_chat_template)
     if cache_key not in EVAL_PROMPT_DATASET:
         tokenizer = AutoTokenizer.from_pretrained(args.hf_checkpoint, trust_remote_code=True)
         EVAL_PROMPT_DATASET[cache_key] = Dataset(
@@ -493,7 +493,7 @@ async def eval_rollout_single_dataset(
             multimodal_keys=args.multimodal_keys,
             metadata_key=dataset_cfg.metadata_key,
             tool_key=dataset_cfg.tool_key,
-            apply_chat_template=args.apply_chat_template,
+            apply_chat_template=dataset_cfg.apply_chat_template,
             apply_chat_template_kwargs=args.apply_chat_template_kwargs,
         )
     dataset = EVAL_PROMPT_DATASET[cache_key]

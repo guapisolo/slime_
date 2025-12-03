@@ -41,6 +41,11 @@ DATASET_RUNTIME_SPECS: dict[str, dict[str, tuple[str, ...]]] = {
 }
 
 DATASET_SAMPLE_SPECS: dict[str, dict[str, tuple[str, ...]]] = {
+    "apply_chat_template": {
+        "dataset_keys": ("apply_chat_template",),
+        "default_keys": ("apply_chat_template",),
+        "arg_attrs": ("apply_chat_template",),
+    },
     "input_key": {
         "dataset_keys": ("input_key",),
         "default_keys": ("input_key",),
@@ -106,6 +111,7 @@ class EvalDatasetConfig:
     custom_generate_function_path: str | None = None
 
     # Dataset-specific overrides
+    apply_chat_template: bool | None = None
     input_key: str | None = None
     label_key: str | None = None
     tool_key: str | None = None
@@ -129,6 +135,7 @@ class EvalDatasetConfig:
         return (
             self.name,
             self.path,
+            self.apply_chat_template,
             self.input_key,
             self.label_key,
             self.tool_key,
