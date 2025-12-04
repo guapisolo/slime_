@@ -112,6 +112,7 @@ class Tau2TrainableAgent:
     ):
         self.args = args
         self.sampling_params = sampling_params
+        self._max_response_len = sampling_params["max_new_tokens"]
         self.domain = domain
         self.task_split = task_split
         self.max_steps = max_steps
@@ -296,6 +297,17 @@ class Tau2TrainableAgent:
             text_input = tokenizer.apply_chat_template(
                 chat_messages, tokenize=False, add_generation_prompt=True, tools=tools_info
             )
+
+            used_tokens = len(prompt_token_ids) + len(response_token_ids)
+            max_new_tokens = min(self._max_response_len, self.sampling_params["max_context_len"] - used_tokens)
+            if max_new_tokens <= 0:
+                res.status = Status.TRUNCATED
+                return self._build_final_result(
+                    res, total_reward, res.info, chat_messages, loss_masks, prompt_token_ids, response_token_ids
+                )
+
+            self.sampling_params["max_new_tokens"] = max_new_tokens
+
             payload = {"text": text_input, "sampling_params": self.sampling_params}
             output = await self._call_llm(url, payload)
 
