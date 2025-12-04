@@ -111,8 +111,9 @@ class Tau2TrainableAgent:
         all_messages_as_observation: bool = True,
     ):
         self.args = args
-        self.sampling_params = sampling_params
-        self._max_response_len = sampling_params["max_new_tokens"]
+        self.sampling_params = dict(sampling_params or {})
+        self._max_response_len: int = self.sampling_params.get("max_new_tokens")
+        self._max_context_len: int = self.sampling_params.get("max_context_len")
         self.domain = domain
         self.task_split = task_split
         self.max_steps = max_steps
@@ -299,7 +300,12 @@ class Tau2TrainableAgent:
             )
 
             used_tokens = len(prompt_token_ids) + len(response_token_ids)
-            max_new_tokens = min(self._max_response_len, self.sampling_params["max_context_len"] - used_tokens)
+            if self._max_context_len is not None:
+                remaining_context = self._max_context_len - used_tokens
+                max_new_tokens = min(self._max_response_len, remaining_context)
+            else:
+                max_new_tokens = self._max_response_len
+
             if max_new_tokens <= 0:
                 res.status = Status.TRUNCATED
                 return self._build_final_result(
