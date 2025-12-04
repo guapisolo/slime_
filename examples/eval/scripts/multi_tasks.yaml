@@ -34,8 +34,9 @@ eval:
       datasets:
         - name: aime25
           max_response_len: 8192
-          n_samples_per_eval_prompt: 8
-        - name: arena-hard
           n_samples_per_eval_prompt: 2
+        - name: arena-hard
+          n_samples_per_eval_prompt: 1
+          max_response_len: 24576
         - name: hle
-          max_response_len: 32768
+          max_response_len: 24576

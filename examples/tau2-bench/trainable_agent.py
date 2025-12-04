@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
@@ -112,8 +113,9 @@ class Tau2TrainableAgent:
     ):
         self.args = args
         self.sampling_params = dict(sampling_params or {})
-        self._max_response_len: int = self.sampling_params.get("max_new_tokens")
-        self._max_context_len: int = self.sampling_params.get("max_context_len")
+        self._max_response_len = self.sampling_params.get("max_new_tokens") or args.rollout_max_response_len
+        self._max_context_len = self.sampling_params.get("max_context_len") or args.rollout_max_context_len
+        self._strip_think = getattr(args, "rollout_strip_think", False)
         self.domain = domain
         self.task_split = task_split
         self.max_steps = max_steps
@@ -205,6 +207,12 @@ class Tau2TrainableAgent:
             params = {}
         action = {"id": tool_call.get("id") or tool_call.get("name"), "name": tool_call["name"], "arguments": params}
         return json.dumps(action)
+
+    @staticmethod
+    def _strip_think_segments(text: str) -> str:
+        if "<think>" not in text:
+            return text
+        return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
 
     def _append_new_messages(
         self,
@@ -324,6 +332,8 @@ class Tau2TrainableAgent:
                 )
 
             response = output["text"]
+            if self._strip_think:
+                response = self._strip_think_segments(response)
             if response.endswith("<|im_end|>"):
                 response = response[:-10]
 
