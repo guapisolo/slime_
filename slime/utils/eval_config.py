@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -55,16 +55,6 @@ DATASET_SAMPLE_SPECS: dict[str, dict[str, tuple[str, ...]]] = {
         "dataset_keys": ("metadata_key",),
         "default_keys": ("metadata_key",),
         "arg_attrs": ("metadata_key",),
-    },
-    "stop": {
-        "dataset_keys": ("stop",),
-        "default_keys": ("stop",),
-        "arg_attrs": ("rollout_stop",),
-    },
-    "stop_token_ids": {
-        "dataset_keys": ("stop_token_ids",),
-        "default_keys": ("stop_token_ids",),
-        "arg_attrs": ("rollout_stop_token_ids",),
     },
 }
 
@@ -121,9 +111,6 @@ class EvalDatasetConfig:
     top_p: float | None = None
     top_k: int | None = None
     max_response_len: int | None = None
-
-    stop: Sequence[str] | None = None
-    stop_token_ids: Sequence[int] | None = None
 
     metadata_overrides: dict[str, Any] = field(default_factory=dict)
 
