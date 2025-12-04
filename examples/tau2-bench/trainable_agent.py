@@ -2,7 +2,7 @@ import json
 import logging
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from tau2.agent.llm_agent import AGENT_INSTRUCTION, SYSTEM_PROMPT
 from tau2.data_model.message import AssistantMessage, Message, ToolCall, ToolMessage, UserMessage
@@ -28,21 +28,21 @@ class Status(Enum):
 class InteractionResult:
     prompt: str
     reward: float
-    messages: List[Dict[str, Any]]
-    info: Dict[str, Any]
+    messages: list[dict[str, Any]]
+    info: dict[str, Any]
     response: str = ""
-    loss_mask: Optional[List[int]] = None
-    tokens: Optional[List[int]] = None
+    loss_mask: list[int] | None = None
+    tokens: list[int] | None = None
     status: Status = Status.COMPLETED
     response_length: int = 0
 
 
-def _tool_to_openai_schema(tool: Any) -> Dict[str, Any]:
+def _tool_to_openai_schema(tool: Any) -> dict[str, Any]:
     """Convert tau2 Tool object to OpenAI schema expected by chat template."""
     return tool.openai_schema
 
 
-def _tool_call_to_openai(call: ToolCall) -> Dict[str, Any]:
+def _tool_call_to_openai(call: ToolCall) -> dict[str, Any]:
     """Convert tau2 ToolCall to OpenAI-compatible tool call payload."""
     return {
         "id": call.id or call.name,
@@ -54,7 +54,7 @@ def _tool_call_to_openai(call: ToolCall) -> Dict[str, Any]:
     }
 
 
-def _tau_message_to_chat(msg: Message) -> Optional[Dict[str, Any]]:
+def _tau_message_to_chat(msg: Message) -> dict[str, Any] | None:
     """Convert tau2 message objects to the chat format expected by transformers templates."""
     if isinstance(msg, UserMessage):
         if msg.tool_calls:
@@ -100,17 +100,17 @@ class Tau2TrainableAgent:
 
     def __init__(
         self,
-        rollout_args,
-        sampling_params: Dict[str, Any],
+        args,
+        sampling_params: dict[str, Any],
         domain: str,
         task_split: str,
         max_steps: int = 100,
-        user_llm: Optional[str] = None,
-        user_llm_args: Optional[Dict[str, Any]] = None,
+        user_llm: str | None = None,
+        user_llm_args: dict[str, Any] | None = None,
         solo_mode: bool = False,
         all_messages_as_observation: bool = True,
     ):
-        self.rollout_args = rollout_args
+        self.args = args
         self.sampling_params = sampling_params
         self.domain = domain
         self.task_split = task_split
@@ -122,13 +122,13 @@ class Tau2TrainableAgent:
 
         self._task_splits = self._load_task_splits()
 
-    def _load_task_splits(self) -> Optional[Dict[str, List[str]]]:
+    def _load_task_splits(self) -> dict[str, list[str]] | None:
         loader = registry.get_task_splits_loader(self.domain)
         if loader is None:
             return None
         return loader()
 
-    def _resolve_task_id(self, prompt_value: str) -> Tuple[str, int]:
+    def _resolve_task_id(self, prompt_value: str) -> tuple[str, int]:
         """
         Convert the incoming prompt payload into a concrete task id.
         Accepts raw task ids or integer indices into the configured split.
@@ -162,17 +162,17 @@ class Tau2TrainableAgent:
             raise IndexError(f"Index {idx} out of range for split '{self.task_split}' with {len(split_ids)} tasks.")
         return str(split_ids[idx])
 
-    def _build_system_message(self, policy: str) -> Dict[str, str]:
+    def _build_system_message(self, policy: str) -> dict[str, str]:
         system_prompt = SYSTEM_PROMPT.format(domain_policy=policy, agent_instruction=AGENT_INSTRUCTION)
         return {"role": "system", "content": system_prompt}
 
-    def _get_token_delta(self, tokenizer, messages: List[Dict[str, Any]]) -> Tuple[List[int], List[int]]:
+    def _get_token_delta(self, tokenizer, messages: list[dict[str, Any]]) -> tuple[list[int], list[int]]:
         """
         Compute token delta and loss mask for the newest message.
         """
         curr = tokenizer.apply_chat_template(messages, add_generation_prompt=False, tokenize=False)
-        token_ids: List[int] = []
-        loss_mask: List[int] = []
+        token_ids: list[int] = []
+        loss_mask: list[int] = []
 
         if messages[-1]["role"] == "assistant":
             prev = tokenizer.apply_chat_template(messages[:-1], add_generation_prompt=True, tokenize=False)
@@ -186,14 +186,14 @@ class Tau2TrainableAgent:
             loss_mask += [0] * len(new_tokens)
         return token_ids, loss_mask
 
-    async def _call_llm(self, url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    async def _call_llm(self, url: str, payload: dict[str, Any]) -> dict[str, Any]:
         return await post(url, payload)
 
-    def _parse_response(self, response: str, tools_info: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def _parse_response(self, response: str, tools_info: list[dict[str, Any]]) -> dict[str, Any]:
         parsed = parse_tools(response, tools_info, parser="qwen25")
         return parsed
 
-    def _build_action_string(self, calls: List[Dict[str, Any]], text_response: str) -> str:
+    def _build_action_string(self, calls: list[dict[str, Any]], text_response: str) -> str:
         if not calls:
             return text_response
         tool_call = calls[0]
@@ -207,11 +207,11 @@ class Tau2TrainableAgent:
     def _append_new_messages(
         self,
         tokenizer,
-        chat_messages: List[Dict[str, Any]],
-        env_messages: List[Message],
+        chat_messages: list[dict[str, Any]],
+        env_messages: list[Message],
         seen_count: int,
-        response_token_ids: List[int],
-        loss_masks: List[int],
+        response_token_ids: list[int],
+        loss_masks: list[int],
     ) -> int:
         for msg in env_messages[seen_count:]:
             chat_msg = _tau_message_to_chat(msg)
@@ -227,11 +227,11 @@ class Tau2TrainableAgent:
         self,
         res: InteractionResult,
         total_reward: float,
-        info: Dict[str, Any],
-        chat_messages: List[Dict[str, Any]],
-        loss_masks: List[int],
-        prompt_token_ids: List[int],
-        response_token_ids: List[int],
+        info: dict[str, Any],
+        chat_messages: list[dict[str, Any]],
+        loss_masks: list[int],
+        prompt_token_ids: list[int],
+        response_token_ids: list[int],
     ) -> InteractionResult:
         res.reward = total_reward
         res.info.update(info)
@@ -243,9 +243,9 @@ class Tau2TrainableAgent:
         return res
 
     async def run_episode(self, task_id: str) -> InteractionResult:
-        state = GenerateState(self.rollout_args)
+        state = GenerateState(self.args)
         tokenizer = state.tokenizer
-        url = f"http://{self.rollout_args.sglang_router_ip}:{self.rollout_args.sglang_router_port}/generate"
+        url = f"http://{self.args.sglang_router_ip}:{self.args.sglang_router_port}/generate"
 
         env = AgentGymEnv(
             domain=self.domain,
@@ -259,15 +259,15 @@ class Tau2TrainableAgent:
 
         _, env_info = env.reset()
         tools_info = [_tool_to_openai_schema(t) for t in env_info["tools"]]
-        base_info: Dict[str, Any] = {
+        base_info: dict[str, Any] = {
             "task_id": getattr(env_info.get("task"), "id", task_id),
             "domain": self.domain,
             "task_split": self.task_split,
             "policy": env_info.get("policy"),
         }
 
-        chat_messages: List[Dict[str, Any]] = [self._build_system_message(env_info["policy"])]
-        initial_env_messages = getattr(env, "_agent").observation if getattr(env, "_agent", None) else []
+        chat_messages: list[dict[str, Any]] = [self._build_system_message(env_info["policy"])]
+        initial_env_messages = env._agent.observation if getattr(env, "_agent", None) else []
         seen_env_messages = len(initial_env_messages)
         for m in initial_env_messages:
             converted = _tau_message_to_chat(m)
@@ -279,8 +279,8 @@ class Tau2TrainableAgent:
         )
         prompt_token_ids = tokenizer(prompt_text, add_special_tokens=False)["input_ids"]
 
-        loss_masks: List[int] = []
-        response_token_ids: List[int] = []
+        loss_masks: list[int] = []
+        response_token_ids: list[int] = []
         total_reward = 0.0
 
         res = InteractionResult(
@@ -302,7 +302,7 @@ class Tau2TrainableAgent:
             if output["meta_info"]["finish_reason"]["type"] == "abort":
                 res.status = Status.ABORTED
                 return self._build_final_result(
-                    res, total_reward, info, chat_messages, loss_masks, prompt_token_ids, response_token_ids
+                    res, total_reward, res.info, chat_messages, loss_masks, prompt_token_ids, response_token_ids
                 )
 
             response = output["text"]
@@ -317,14 +317,14 @@ class Tau2TrainableAgent:
                 logger.warning("Failed to parse response: %s", e)
                 res.status = Status.ABORTED
                 return self._build_final_result(
-                    res, total_reward, info, chat_messages, loss_masks, prompt_token_ids, response_token_ids
+                    res, total_reward, res.info, chat_messages, loss_masks, prompt_token_ids, response_token_ids
                 )
 
             if not calls and not (normal_text or response):
                 logger.warning("Empty model response; aborting rollout.")
                 res.status = Status.ABORTED
                 return self._build_final_result(
-                    res, total_reward, info, chat_messages, loss_masks, prompt_token_ids, response_token_ids
+                    res, total_reward, res.info, chat_messages, loss_masks, prompt_token_ids, response_token_ids
                 )
 
             if calls:
@@ -359,7 +359,7 @@ class Tau2TrainableAgent:
                 logger.warning("Environment step failed: %s", e)
                 res.status = Status.ABORTED
                 return self._build_final_result(
-                    res, total_reward, info, chat_messages, loss_masks, prompt_token_ids, response_token_ids
+                    res, total_reward, res.info, chat_messages, loss_masks, prompt_token_ids, response_token_ids
                 )
 
             total_reward = reward

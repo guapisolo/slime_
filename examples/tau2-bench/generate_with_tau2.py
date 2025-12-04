@@ -7,7 +7,7 @@ Configure the domain/task split below, point slime at this file via
 
 import logging
 import os
-from typing import Any, Dict
+from typing import Any
 
 from slime.utils.types import Sample
 
@@ -16,7 +16,7 @@ from .trainable_agent import Tau2TrainableAgent, res_to_sample
 logger = logging.getLogger(__name__)
 
 # Base configuration (edit here as needed).
-TAU2_CONFIGS: Dict[str, Any] = {
+TAU2_CONFIGS: dict[str, Any] = {
     "domain": "airline",  # tau2 domain: airline | retail | telecom | mock
     "task_split": "train",  # task split within the domain
     "max_steps": 100,  # safety cap on interaction steps
@@ -35,11 +35,11 @@ if API_KEY == "NONE":
 TAU2_CONFIGS["user_llm_args"] = {"api_key": API_KEY}
 
 
-async def generate(args: Dict[str, Any], sample: Sample, sampling_params: dict) -> Sample:
+async def generate(args: dict[str, Any], sample: Sample, sampling_params: dict) -> Sample:
     assert not args.partial_rollout, "Partial rollout is not supported for tau2."
 
     agent = Tau2TrainableAgent(
-        rollout_args=args,
+        args=args,
         sampling_params=sampling_params,
         domain=TAU2_CONFIGS["domain"],
         task_split=TAU2_CONFIGS["task_split"],
