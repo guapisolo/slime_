@@ -1,105 +1,160 @@
-# slime
+<div align="center">
 
-[中文版](./README_zh.md)
+<!-- Yiping Wang, Shao-Rong Su, Zhiyuan Zeng, Eva Xu, Liliang Ren, Xinyu Yang, Zeyi Huang, Xuehai He, Luyao Ma, Baolin Peng, Hao Cheng, Pengcheng He, Weizhu Chen, Shuohang Wang, Simon Shaolei Du, Yelong Shen -->
 
-[![Documentation](https://img.shields.io/badge/docs-latest-brightgreen.svg?style=flat)](https://thudm.github.io/slime/)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/THUDM/slime)
+# ThetaEvolve: Test-time Learning on Open Problems
 
-**slime** is an LLM post-training framework for RL scaling, providing two core capabilities:
 
-1.  **High-Performance Training**: Supports efficient training in various modes by connecting Megatron with SGLang;
-2.  **Flexible Data Generation**: Enables arbitrary training data generation workflows through custom data generation interfaces and server-based engines.
+[Yiping Wang](https://ypwang61.github.io/), 
+[Shao-Rong Su](https://www.linkedin.com/in/andysu0731/), 
+[Zhiyuan Zeng](https://zhiyuan-zeng.github.io/), 
+[Eva Xu](https://www.linkedin.com/in/evaxu9187/),
+[Liliang Ren](https://renll.github.io/), 
+[Xinyu Yang](https://xinyuyang.me/),
+[Zeyi Huang](https://oodbag.github.io/),
+[Xuehai He](https://sheehan1230.github.io/), 
+[Luyao Ma](https://www.linkedin.com/in/luyao-ma-4092a8273/),
+[Baolin Peng](https://www.microsoft.com/en-us/research/people/baolinpeng/), 
+[Hao Cheng](https://www.microsoft.com/en-us/research/people/chehao/), 
+[Pengcheng He](https://www.linkedin.com/in/pengcheng-he-42163729/),
+[Weizhu Chen](https://www.microsoft.com/en-us/research/people/wzchen/), 
+[Shuohang Wang](https://www.microsoft.com/en-us/research/people/shuowa/), 
+[Simon Shaolei Du*](https://simonshaoleidu.com/), 
+[Yelong Shen*](https://www.linkedin.com/in/yelong-shen-84b0122b/)
 
-slime is the RL-framework behind [GLM-4.5](https://z.ai/blog/glm-4.5) and [GLM-4.6](https://z.ai/blog/glm-4.6) and apart from models from Z.ai, we also supports the following models:
-- Qwen3 series (Qwen3Next, Qwen3MoE, Qwen3), Qwen2.5 series;
-- DeepSeek V3 series (DeepSeek V3, V3.1, DeepSeek R1);
-- Llama 3.
+<br>
 
-## Blogs
+[![paper](https://img.shields.io/badge/paper-A42C25?style=for-the-badge&logo=arxiv&logoColor=white)](https://arxiv.org/abs/2511.23473)
+[![Code](https://img.shields.io/badge/Code-000000?style=for-the-badge&logo=github&logoColor=000&logoColor=white)](https://github.com/ypwang61/ThetaEvolve)
+<!-- [![📁_W&B_LOGS](https://img.shields.io/badge/📁_W&B_LOGS-fcd022?style=for-the-badge&logo=wandb&logoColor=000)](https://wandb.ai/yipingwanguw/verl_few_shot?nw=nwuseryipingwang22) -->
+<!-- [![X_Summary](https://img.shields.io/badge/X_Summary-000000?style=for-the-badge&logo=x&logoColor=white)](https://x.com/ypwang61/status/1917596101953348000) -->
+<!-- [![Models/Dataset](https://img.shields.io/badge/Models/Dataset-fcd022?style=for-the-badge&logo=huggingface&logoColor=000)](https://huggingface.co/collections/ypwang61/one-shot-rlvr-6827f72c3359b2ffe75fc1a8) -->
 
-- Our vision: [slime: An SGLang-Native Post-Training Framework for RL Scaling](https://lmsys.org/blog/2025-07-09-slime/).
-- Our ideas on agentic training: [Agent-Oriented Design: An Asynchronous and Decoupled Framework for Agentic RL](https://www.notion.so/Agent-Oriented-Design-An-Asynchronous-and-Decoupled-Framework-for-Agentic-RL-2278e692d081802cbdd5d37cef76a547)
-- v0.1.0 release note: [v0.1.0: Redefining High-Performance RL Training Frameworks](https://thudm.github.io/slime/blogs/release_v0.1.0.html)
+</div>
 
-## Table of Contents
+## Outline
 
-- [Architecture Overview](#architecture-overview)
-- [Quick Start](#quick-start)
-- [Projects Built with slime](#projects-built-with-slime)
-- [Arguments Walkthrough](#arguments-walkthrough)
-- [Developer Guide](#developer-guide)
-- [FAQ & Acknowledgements](#faq--acknowledgements)
+We introduce **ThetaEvolve**, an open-source pipeline that simplifies (e.g., with single LLM) and extends AlphaEvolve to efficiently scale both ❄️in-context learning and 🔥RL training at test time.
 
-## Architecture Overview
+With ThetaEvolve, an 8B model can outperform AlphaEvolve on open optimization problems by scaling compute for inference or test-time RL🚀:
 
-![arch](./imgs/arch.png)
+⭕Circle packing:
 
-**Module Descriptions**:
+* AlphaEvolve (Gemini-2.0-Flash/Pro) : 2.63586276
 
-- **training (Megatron)**: Responsible for the main training process, reads data from the Data Buffer, and synchronizes parameters to the rollout module after training.
-- **rollout (SGLang + router)**: Generates new data (including rewards/verifier outputs) and stores it in the Data Buffer.
-- **data buffer**: A bridge module that manages prompt initialization, custom data, and rollout generation methods.
+* **Ours (R1-Qwen3-8B): 2.63598308**
 
-## Quick Start
+![Figure1](assets/f0.png)
 
-For a comprehensive quick start guide covering environment setup, data preparation, training startup, and key code analysis, please refer to:
-- [Quick Start Guide](./docs/en/get_started/quick_start.md)
 
-We also provide examples for some use cases not covered in the quick start guide; please check [examples](examples/).
 
-## Projects Built upon slime
 
-slime has powered several novel research projects and production systems. Here are some notable examples:
+## Setup
 
-### ⚡ TritonForge: Agentic RL Training Framework for Kernel Generation
-
-[**TritonForge**](https://github.com/RLsys-Foundation/TritonForge) leverages slime's SFT & RL capabilities to train LLMs that automatically generate optimized GPU kernels. By using a two-stage training approach—supervised fine-tuning followed by reinforcement learning with multi-turn compilation feedback—TritonForge achieves remarkable results in converting PyTorch operations into high-performance Triton kernels.
-
-### 🚀 APRIL: Accelerating RL Training with Active Partial Rollouts
-
-[**APRIL**](https://github.com/RLsys-Foundation/APRIL) introduces a system-level optimization that seamlessly integrates with slime to accelerate the rollout generation phase in RL training. By intelligently over-provisioning requests and actively managing partial completions, APRIL addresses the long-tail generation bottleneck that typically consumes over 90% of RL training time.
-
-These projects showcase slime's versatility—from training code-generation models to optimizing RL training systems—making it a powerful foundation for both research and production deployments.
-
-## Arguments Walkthrough
-
-Arguments in slime are divided into three categories:
-
-1.  **Megatron arguments**: slime reads all arguments set in Megatron via `PYTHONPATH`. You can configure Megatron by passing arguments like `--tensor-model-parallel-size 2`.
-2.  **SGLang arguments**: All arguments for the installed SGLang are supported. These arguments must be prefixed with `--sglang-`. For example, `--mem-fraction-static` should be passed as `--sglang-mem-fraction-static`.
-3.  **slime-specific arguments**: Please refer to: [slime/utils/arguments.py](slime/utils/arguments.py)
-
-For complete usage instructions, please refer to the [Usage Documentation](docs/en/get_started/usage.md).
-
-## Developer Guide
-
-- **Contributions are welcome\!** If you have suggestions for new features, performance tuning, or feedback on user experience, feel free to submit an Issue or PR 😊
-
-- Use [pre-commit](https://pre-commit.com/) to ensure code style consistency for your commits:
+Our RL environment follows the same setup as [slime](https://github.com/THUDM/slime) and [OpenEvolve](https://github.com/codelion/openevolve). We use Docker (run in ThetaEvolve folder):
 
 ```bash
-apt install pre-commit -y
-pre-commit install
+# fixed image, haven't checked on the latest image
+docker pull slimerl/slime:v0.5.0rc0-cu126
 
-# run pre-commit to ensure code style consistency
-pre-commit run --all-files --show-diff-on-failure --color=always
+# Start the container
+docker run --rm --name slime-evolve \
+  --gpus all --ipc=host --shm-size=16g \
+  --ulimit memlock=-1 --ulimit stack=67108864 \
+  -v "$PWD":/workspace -w /workspace \
+  -v /path/to/disk:/path/to/disk \
+  -it slimerl/slime:v0.5.0rc0-cu126 /bin/bash
 ```
 
-- For debugging tips, please refer to the [Debugging Guide](docs/en/developer_guide/debug.md)
+After entering the docker, run the installation commands:
 
-## FAQ & Acknowledgements
+```bash
+cd /workspace
+pip install -e .
+cd openevolve_adapted
+pip install --ignore-installed blinker
+rm -rf openevolve.egg-info && pip install -e .
+cd ..
+```
 
-- For frequently asked questions, please see the [Q\&A](docs/en/get_started/qa.md)
-- Special thanks to the following projects & communities: SGLang, Megatron‑LM, mbridge, OpenRLHF, veRL, Pai-Megatron-Patch and others.
-- To quote slime, please use:
+## Tasks
+You could check our tasks in `openevolve_adapted/examples`. It is easy to extend to more tasks with continous objective values.
 
-```bibtext
-@misc{slime_github,
-  author       = {Zilin Zhu and Chengxing Xie and Xin Lv and slime Contributors},
-  title        = {slime: An LLM post-training framework for RL Scaling},
-  year         = {2025},
-  howpublished = {\url{https://github.com/THUDM/slime}},
-  note         = {GitHub repository. Corresponding author: Xin Lv},
-  urldate      = {2025-06-19}
+## Run
+To run the experiments, you could change the parameters in `run.sh`, and then directly run `bash run.sh`
+
+Fist, remember to set the save_path to store ckpts:
+
+```
+export SAVE_PATH=/path/to/disk/save
+```
+
+Then for example, if you want to run prorl-v2-1.5B, circle packing, RL training, original score as reward, you could set:
+
+```bash
+#### Model selection ####
+SMALL_MODEL_NAME="dpsk_prorl_v2_1.5b"
+
+#### Task configuration ####
+TASK="circle_packing_modular"
+
+#### CONFIG_POSTFIX options ####
+CONFIG_POSTFIX="it_XL"
+
+#### Training mode: True for training, False for inference-only ####
+IS_TRAINING=True
+
+#### Training parameters ####
+# Options: "original_reward", "rl_normalized_reward"
+REWARD_PROCESS_TYPE="original_reward"
+
+#### Lazy output penalty ####
+# 1 -> child = parent
+# 2 -> child = any program in database
+LAZY_OUTPUT_PENALTY=1
+```
+
+Finally set the wandb configurations:
+```bash
+WANDB_API_KEY=aaa
+WANDB_ENTITY=bbb
+WANDB_PROJECT=ccc
+```
+
+
+Then you can directly run
+```bash
+bash run.sh
+```
+
+You could also adjust more parameters in `scripts_evolve/Nemotron-Research-Reasoning-Qwen-1.5B/general.sh`. Like ckpt saving frequency (default 10), number of evaluation threads (default 16), gpus (default 8), etc.
+
+
+## Results
+Some results we obtain are available in `Results`. You can run `python vis.py` to see the verification results in each sub-task directory.
+
+For example, we have our best-known solution for circle packing (with zero tolerance) in `Results/CirclePacking/figs/8B-w_RL@65-Formal.png` and AlphaEvolve's solution in `Results/CirclePacking/figs/AlphaEvolve.png`:
+
+<div align="center">
+<img src="Results/CirclePacking/figs/8B-w_RL@65-Formal.png" width="49%">
+<img src="Results/CirclePacking/figs/AlphaEvolve.png" width="47%">
+</div>
+
+We point out that our solution is better than AlphaEvolve’s, and that our configuration is asymmetric, whereas AlphaEvolve’s solution is symmetric.
+
+
+
+The program for finding it (with 1e-6 tolerance as OpenEvolve verification, detailed in paper) is shown in `Results/CirclePacking/programs/8B-w_RL@65.py`. We also provide results from other tasks for visualization.
+
+## Citation
+If you find our work useful, please consider citing:
+
+```bibtex
+@article{wang2025thetaevolve,
+  title={ThetaEvolve: Test-time Learning on Open Problems},
+  author={Wang, Yiping and Su, Shao-Rong and Zeng, Zhiyuan and Xu, Eva and Ren, Liliang and Yang, Xinyu and Huang, Zeyi and He, Xuehai and Ma, Luyao and Peng, Baolin and Cheng, Hao and He, Pengcheng and Chen, Weizhu and Wang, Shuohang and Du, Simon Shaolei and Shen, Yelong},
+  journal={arXiv preprint 2511.23473},
+  year={2025}
 }
+
 ```
