@@ -133,8 +133,15 @@ def compute_advantages_and_returns(args, rollout_data):
     loss_masks: list[torch.Tensor] = rollout_data.get("loss_masks", None)
     total_lengths: list[int] = rollout_data.get("total_lengths", None)
 
+    # DEBUG: Print key input data
+    if rewards is not None:
+        # print(f"[DEBUG] Input rewards: {rewards}")
+        print(f"[DEBUG] Rewards stats: min={min(rewards):.6f}, max={max(rewards):.6f}, mean={sum(rewards)/len(rewards):.6f}")
+    print(f"[DEBUG] advantage_estimator: {args.advantage_estimator}, normalize_advantages: {getattr(args, 'normalize_advantages', False)}")
+
     # return when not the last pp stage.
     if log_probs is None and values is None:
+        print(f"[DEBUG compute_advantages_and_returns] Early return: log_probs and values are None")
         return
 
     if args.kl_coef == 0 or not log_probs:
@@ -152,8 +159,13 @@ def compute_advantages_and_returns(args, rollout_data):
         ]
 
     if args.advantage_estimator in ["grpo", "gspo"]:
+        # print(f"[DEBUG] GRPO rewards: {rewards}")
         rewards = torch.tensor(rewards, dtype=torch.float32, device=kl[0].device)
+        print(f"[DEBUG] Rewards tensor stats: min={rewards.min().item():.6f}, max={rewards.max().item():.6f}, mean={rewards.mean().item():.6f}")
+
         returns = get_grpo_returns(rewards, kl)
+        print(f"[DEBUG] Returns stats: mean={torch.cat(returns).mean().item():.6f}, std={torch.cat(returns).std().item():.6f}")
+
         # TODO: is the copy necessary?
         advantages = [r for r in returns]
 
@@ -205,6 +217,8 @@ def compute_advantages_and_returns(args, rollout_data):
         raise NotImplementedError(f"advantage_estimator {args.advantage_estimator} is not supported. ")
 
     # TODO: OpenRLHF always does advantages normalization but veRL doesn't seem to do it.
+    print(f"[DEBUG] Advantages before norm: mean={torch.cat(advantages).mean().item():.6f}, std={torch.cat(advantages).std().item():.6f}")
+
     if args.normalize_advantages:
         all_advs = torch.cat(advantages)
         cp_size = mpu.get_context_parallel_world_size()
@@ -257,6 +271,8 @@ def compute_advantages_and_returns(args, rollout_data):
             chunk_lengths = [chunk.size(0) for chunk in advantages]
             advantages = list(torch.split(whitened_advs_flat, chunk_lengths))
 
+    print(f"[DEBUG] Final advantages: mean={torch.cat(advantages).mean().item():.6f}, std={torch.cat(advantages).std().item():.6f}")
+
     rollout_data["advantages"] = advantages
     rollout_data["returns"] = returns
 
@@ -302,22 +318,28 @@ def policy_loss_function(args, batch, logits, sum_of_sample_mean):
         log_probs = torch.cat(log_probs, dim=0)
         ppo_kl = old_log_probs - log_probs
 
+
     pg_loss, pg_clipfrac = compute_policy_loss(ppo_kl, advantages, args.eps_clip, args.eps_clip_high)
 
     # Apply TIS off-policy correction using importance sampling if enabled
     if args.use_tis:
         assert "rollout_log_probs" in batch, "rollout_log_probs must be provided for TIS"
+        # print(f"[DEBUG policy_loss] Applying TIS correction with args.tis_clip={args.tis_clip}, args.tis_clip_low={args.tis_clip_low}")
         rollout_log_probs = torch.cat(batch["rollout_log_probs"], dim=0)
         old_log_probs = torch.cat(batch["log_probs"], dim=0)
 
         tis = torch.exp(old_log_probs - rollout_log_probs)
         ois = (-ppo_kl).exp()
+
+        
         tis_clip = torch.clamp(tis, min=args.tis_clip_low, max=args.tis_clip)
         tis_clipfrac = tis_clip != tis
 
         pg_loss = pg_loss * tis_clip
 
     pg_loss = sum_of_sample_mean(pg_loss)
+    # print(f"[DEBUG policy_loss] After sum_of_sample_mean: pg_loss={pg_loss.item():.10f}, max_abs={pg_loss.abs().item():.6f}, shape={pg_loss.shape}")
+
     pg_clipfrac = sum_of_sample_mean(pg_clipfrac)
     ppo_kl = sum_of_sample_mean(ppo_kl)
 
@@ -459,9 +481,15 @@ def loss_function(args, batch, num_microbatches, logits):
             raise ValueError(f"Unknown loss type: {args.loss_type}")
 
     # Here we need to divide by cp_size because to cancel the multiply in Megatron.
-    loss = (
-        loss * num_microbatches / args.global_batch_size * mpu.get_data_parallel_world_size(with_context_parallel=True)
-    )
+    # print(f"[DEBUG loss_scaling] Before scaling: loss={loss.item():.10f}")
+    # print(f"[DEBUG loss_scaling] num_microbatches={num_microbatches}, global_batch_size={args.global_batch_size}")
+    # print(f"[DEBUG loss_scaling] dp_world_size={mpu.get_data_parallel_world_size(with_context_parallel=True)}")
+
+    scaling_factor = num_microbatches / args.global_batch_size * mpu.get_data_parallel_world_size(with_context_parallel=True)
+    # print(f"[DEBUG loss_scaling] scaling_factor={scaling_factor:.6f}")
+
+    loss = loss * scaling_factor
+    # print(f"[DEBUG loss_scaling] After scaling: loss={loss.item():.10f}")
 
     return (
         loss,
