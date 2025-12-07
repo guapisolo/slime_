@@ -221,15 +221,8 @@ def compute_advantages_and_returns(args: Namespace, rollout_data: RolloutBatch) 
     loss_masks: list[torch.Tensor] = rollout_data.get("loss_masks")
     total_lengths: list[int] = rollout_data.get("total_lengths")
 
-    # DEBUG: Print key input data
-    if rewards is not None:
-        # print(f"[DEBUG] Input rewards: {rewards}")
-        print(f"[DEBUG] Rewards stats: min={min(rewards):.6f}, max={max(rewards):.6f}, mean={sum(rewards)/len(rewards):.6f}")
-    print(f"[DEBUG] advantage_estimator: {args.advantage_estimator}, normalize_advantages: {getattr(args, 'normalize_advantages', False)}")
-
     # return when not the last pp stage.
     if log_probs is None and values is None:
-        print(f"[DEBUG compute_advantages_and_returns] Early return: log_probs and values are None")
         return
 
     if args.kl_coef == 0 or not log_probs:
@@ -247,12 +240,9 @@ def compute_advantages_and_returns(args: Namespace, rollout_data: RolloutBatch) 
         ]
 
     if args.advantage_estimator in ["grpo", "gspo"]:
-        # print(f"[DEBUG] GRPO rewards: {rewards}")
         rewards = torch.tensor(rewards, dtype=torch.float32, device=kl[0].device)
-        print(f"[DEBUG] Rewards tensor stats: min={rewards.min().item():.6f}, max={rewards.max().item():.6f}, mean={rewards.mean().item():.6f}")
 
         returns = get_grpo_returns(rewards, kl)
-        print(f"[DEBUG] Returns stats: mean={torch.cat(returns).mean().item():.6f}, std={torch.cat(returns).std().item():.6f}")
 
         # TODO: is the copy necessary?
         advantages = [r for r in returns]
@@ -313,9 +303,6 @@ def compute_advantages_and_returns(args: Namespace, rollout_data: RolloutBatch) 
     else:
         raise NotImplementedError(f"advantage_estimator {args.advantage_estimator} is not supported. ")
 
-    # TODO: OpenRLHF always does advantages normalization but veRL doesn't seem to do it.
-    print(f"[DEBUG] Advantages before norm: mean={torch.cat(advantages).mean().item():.6f}, std={torch.cat(advantages).std().item():.6f}")
-
     if args.normalize_advantages:
         all_advs = torch.cat(advantages)
         cp_size = mpu.get_context_parallel_world_size()
@@ -367,8 +354,6 @@ def compute_advantages_and_returns(args: Namespace, rollout_data: RolloutBatch) 
             )
             chunk_lengths = [chunk.size(0) for chunk in advantages]
             advantages = list(torch.split(whitened_advs_flat, chunk_lengths))
-
-    print(f"[DEBUG] Final advantages: mean={torch.cat(advantages).mean().item():.6f}, std={torch.cat(advantages).std().item():.6f}")
 
     rollout_data["advantages"] = advantages
     rollout_data["returns"] = returns
@@ -525,8 +510,6 @@ def policy_loss_function(
     if args.get_mismatch_metrics or args.use_tis:
         assert "rollout_log_probs" in batch, "rollout_log_probs must be provided for TIS"
         # print(f"[DEBUG policy_loss] Applying TIS correction with args.tis_clip={args.tis_clip}, args.tis_clip_low={args.tis_clip_low}")
-        rollout_log_probs = torch.cat(batch["rollout_log_probs"], dim=0)
-        old_log_probs = torch.cat(batch["log_probs"], dim=0)
 
         ois = (-ppo_kl).exp()
         tis_kwargs = {

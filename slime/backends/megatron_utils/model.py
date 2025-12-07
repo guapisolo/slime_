@@ -502,9 +502,7 @@ def train_one_step(
             loss_reduced[key] = value * mpu.get_context_parallel_world_size() / num_samples_or_tokens
 
         # Add grad_clipfrac to the loss_reduced dict
-        loss_reduced['grad_clipfrac'] = grad_clipfrac
-        print(f"loss: {loss_reduced}, grad_norm: {grad_norm}, grad_clipfrac: {grad_clipfrac}")
-        
+        loss_reduced["grad_clipfrac"] = grad_clipfrac
 
         return loss_reduced, grad_norm
     return {}, grad_norm

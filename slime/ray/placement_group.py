@@ -165,23 +165,24 @@ def create_rollout_manager(args, pg):
         num_gpus=0,
     ).remote(args, pg)
 
+    start_rollout_id = args.start_rollout_id if args.start_rollout_id is not None else 0
+
     if args.rollout_global_dataset:
-        ray.get(rollout_manager.load.remote(args.start_rollout_id - 1))
+        ray.get(rollout_manager.load.remote(start_rollout_id - 1))
     elif getattr(args, "evolving_gym", False):
-        detected_rollout_id = ray.get(rollout_manager.load.remote(args.start_rollout_id - 1))
+        detected_rollout_id = ray.get(rollout_manager.load.remote(start_rollout_id - 1))
         # Update start_rollout_id for debug-rollout-only mode to continue from checkpoint
         if detected_rollout_id is not None and getattr(args, "debug_rollout_only", False):
             args.start_rollout_id = detected_rollout_id + 1
             print(f"[DEBUG-ROLLOUT-ONLY] Resuming from rollout_id={args.start_rollout_id}")
-    else :
-        assert False, "None of args.rollout_global_dataset, args.evolving_gym is set."
 
     # calculate num_rollout from num_epoch
     num_rollout_per_epoch = None
     if args.num_rollout is None:
         num_rollout_per_epoch = ray.get(rollout_manager.get_num_rollout_per_epoch.remote())
         args.num_rollout = num_rollout_per_epoch * args.num_epoch
-        assert args.num_rollout > 0
+
+    assert args.num_rollout > 0
 
     if args.check_weight_update_equal:
         ray.get(rollout_manager.check_weights.remote(action="snapshot"))

@@ -124,10 +124,9 @@ class EvolvingGymManager:
             assert False, "We need apply chat template now"
             prompt_str = (system_txt + "\n\n" + user_txt).strip()
 
-        # Optional length check (consistent with global, no filtering by default)
         if max_length is not None:
-            assert False, "For now, we don't discard overlong prompts"
-            if len(tokenizer(prompt_dict)["input_ids"]) > max_length:
+            prompt_ids = tokenizer(prompt_str, add_special_tokens=False)["input_ids"]
+            if len(prompt_ids) > max_length:
                 return None
         
         return Sample(
@@ -319,32 +318,28 @@ class RolloutDataSource(DataSource):
 
         if not self.args.rollout_global_dataset:
             if self.args.evolving_gym:
-                # Load evolving gym database
                 database_path = os.path.join(self.args.load, f"rollout/evolving_gym_database_{rollout_id}")
                 if os.path.exists(database_path):
                     self.evolving_gym_manager.gym.database.load(database_path)
-                    # Set initialization flag to avoid duplicate initialization
                     self.evolving_gym_manager.gym._initialized = True
-                    print(f"[LOAD] Loaded evolving gym database with {len(self.evolving_gym_manager.gym.database.programs)} programs from rollout_id={rollout_id}")
-
-                    # Debug output: print database distribution (similar to sglang_rollout.py style)
+                    print(
+                        "[LOAD] Loaded evolving gym database with "
+                        f"{len(self.evolving_gym_manager.gym.database.programs)} programs from rollout_id={rollout_id}"
+                    )
                     if self.evolving_gym_manager.gym.recording_enabled and self.evolving_gym_manager.gym._recorder:
                         self.evolving_gym_manager.gym._recorder.print_database_score_distribution()
                 else:
-                    # assert False, f"Evolving gym database {database_path} does not exist."
                     print(f"[LOAD] Warning: Evolving gym database {database_path} does not exist, using empty database")
             else:
                 assert False, "None of args.rollout_global_dataset or args.evolving_gym is set."
-            # return
-        else :
-            assert not self.args.evolving_gym, "If args.rollout_global_dataset is set, args.evolving_gym must not be set."
+            return detected_rollout_id
 
-        # Load RolloutDataSource base state
+        assert not self.args.evolving_gym, "If args.rollout_global_dataset is set, args.evolving_gym must not be set."
+
         path = os.path.join(self.args.load, f"rollout/global_dataset_state_dict_{rollout_id}.pt")
         if not os.path.exists(path):
-            # assert False, f"Checkpoint {path} does not exist."
             print(f"[LOAD] Checkpoint {path} does not exist.")
-            return
+            return detected_rollout_id
 
         print(f"[LOAD] load metadata from {path}")
         print(f"[LOAD] load metadata: {self.metadata}")
@@ -355,7 +350,7 @@ class RolloutDataSource(DataSource):
         self.sample_index = state_dict.get("sample_index", 0)
         self.metadata = state_dict.get("metadata", {})
 
-        if self.args.rollout_global_dataset and self.args.rollout_shuffle:
+        if self.args.rollout_shuffle:
             self.dataset.shuffle(self.epoch_id)
 
         return detected_rollout_id
